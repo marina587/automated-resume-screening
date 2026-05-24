@@ -1,274 +1,74 @@
-# Dependencies
-__pycache__/
+# Compiled and build artifacts
 *.pyc
-*.pyo
-*.pyd
+__pycache__/
+*.o
+*.obj
+*.class
+*.so
+*.dll
+*.exe
+*.out
 
-# Build artifacts
-build/
-dist/
-*.egg-info/
-
-# Environment
+# Dependencies
 .venv/
 venv/
 .env
 .env.local
-*.env.*
+.env.*
 
-# Logs
+# Logs and temp files
 *.log
+*.tmp
+*.swp
+
+# Editors
+.vscode/
+.idea/
+
+# Build directories
+build/
+dist/
+target/
+.mypy_cache/
+.pytest_cache/
+coverage/
+htmlcov/
+.nyc_output/
+tmp/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 
 # Coverage
 .coverage
-coverage/
-htmlcov/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*.tmp
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Testing
-.pytest_cache/
-.mypy_cache/
-
-# Data (if not meant to be tracked)
-*.csv
-data/
-
-# ML specific
-*.model
-*.pt
-*.pth
-*.h5
-*.ckpt
-*.bin
-*.onnx
-*.joblib
-*.pickle
-*.pkl
-
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
-
-# Distribution / packaging
-*.tar.gz
-*.whl
-*.zip
-
-# Documentation builds
-_sphinx/
-docs/_build/
-
-# Temporary files
-*~
-*.bak
-*.tmp
-
-# Database
-*.db
-*.sqlite
-*.sqlite3
-
-# Cache
-.cache/
-__pycache__/
-*.cache
-
-# Lock files
-package-lock.json
-Pipfile.lock
-poetry.lock
-
-# Secrets/config
-config/secrets.*
-secrets/
-credentials.json
-*.key
-*.pem
-*.crt
-*.cert
-
-# Artifacts
-*.o
-*.obj
-*.so
-*.a
-*.lib
-*.dll
-*.dylib
-*.exe
-*.out
-*.class
-*.jar
-*.war
-*.ear
-target/
+# Gradle
 .gradle/
-*.class
-*.jar
-*.war
-*.ear
-*.iml
-*.iws
-*.ipr
-nbproject/
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
-ehthumbs.db
-Icon?
-._*
-.Spotlight-V100
-.Trashes
-lost+found
-*.fuse_hidden*
-.directory
-*.metadata
-*.tmp
-*.temp
-*.log
-*.backup
-*.bak
-*.old
-*.orig
-*.rej
-*.diff
-*.patch
-*~
-*.swp
-*.swo
-*.pyc
-*.pyo
-*.pyd
-__pycache__/
-*.so
-*.egg-info/
-build/
-dist/
-*.tar.gz
-*.whl
-*.zip
-*.rar
-*.7z
-*.gz
-*.bz2
-*.xz
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar
-*.tgz
-*.tbz2
-*.txz
-*.tzst
-*.jar
-*.war
-*.ear
-*.class
-*.o
-*.obj
-*.out
-*.dll
-*.so
-*.a
-*.lib
-*.dylib
-*.exe
-*.bin
-*.dat
-*.idx
-*.data
-*.lock
-*.cache
-*.tmp
-*.temp
-*.log
-*.bak
-*.old
-*.orig
-*.rej
-*.diff
-*.patch
-*~
-*.swp
-*.swo
-*.pyc
-*.pyo
-*.pyd
-__pycache__/
-*.so
-*.egg-info/
-build/
-dist/
-*.tar.gz
-*.whl
-*.zip
-*.rar
-*.7z
-*.gz
-*.bz2
-*.xz
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar
-*.tgz
-*.tbz2
-*.txz
-*.tzst
-*.jar
-*.war
-*.ear
-*.class
-*.o
-*.obj
-*.out
-*.dll
-*.so
-*.a
-*.lib
-*.dylib
-*.exe
-*.bin
-*.dat
-*.idx
-*.data
-*.lock
-*.cache
-*.tmp
-*.temp
-*.log
-*.bak
-*.old
-*.orig
-*.rej
-*.diff
-*.patch
-*~
-*.swp
-*.swo
+
+# Node
+node_modules/
