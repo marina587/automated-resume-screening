@@ -79,6 +79,58 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+@st.cache_resource
+def _load_cached_models(model_dir: str = None):
+    """Cached function to load all required models."""
+    try:
+        import joblib
+        from ml_training.text_preprocessing import TextPreprocessor
+        from ml_training.resume_ranking import ResumeRanker
+        
+        # Determine model directory - check multiple locations
+        if model_dir is None:
+            # Try common locations
+            possible_paths = [
+                Path("models"),
+                Path(__file__).parent.parent / "models",
+                Path("/app/models"),
+                Path("ml_training/models")
+            ]
+            for p in possible_paths:
+                if p.exists():
+                    model_path = p
+                    break
+            else:
+                model_path = Path("models")
+        else:
+            model_path = Path(model_dir)
+        
+        classifier_path = model_path / "logistic_model.pkl"
+        vectorizer_path = model_path / "vectorizer.pkl"
+        encoder_path = model_path / "label_encoder.pkl"
+        
+        if not all([classifier_path.exists(), vectorizer_path.exists(), encoder_path.exists()]):
+            return None
+        
+        classifier = joblib.load(classifier_path)
+        vectorizer = joblib.load(vectorizer_path)
+        label_encoder = joblib.load(encoder_path)
+        preprocessor = TextPreprocessor()
+        ranker = ResumeRanker(vectorizer=vectorizer, preprocessor=preprocessor)
+        
+        return {
+            'classifier': classifier,
+            'vectorizer': vectorizer,
+            'label_encoder': label_encoder,
+            'preprocessor': preprocessor,
+            'ranker': ranker
+        }
+        
+    except Exception as e:
+        st.error(f"Error loading models: {e}")
+        return None
+
+
 class ModelLoader:
     """Handles loading of ML models for the frontend."""
     
@@ -90,52 +142,20 @@ class ModelLoader:
         self.ranker = None
         self.is_loaded = False
     
-    @st.cache_resource
-    def load_models(_self, model_dir: str = None):
-        """Load all required models."""
-        try:
-            import joblib
-            from ml_training.text_preprocessing import TextPreprocessor
-            from ml_training.resume_ranking import ResumeRanker
-            
-            # Determine model directory - check multiple locations
-            if model_dir is None:
-                # Try common locations
-                possible_paths = [
-                    Path("models"),
-                    Path(__file__).parent.parent / "models",
-                    Path("/app/models"),
-                    Path("ml_training/models")
-                ]
-                for p in possible_paths:
-                    if p.exists():
-                        model_path = p
-                        break
-                else:
-                    model_path = Path("models")
-            else:
-                model_path = Path(model_dir)
-            
-            classifier_path = model_path / "logistic_model.pkl"
-            vectorizer_path = model_path / "vectorizer.pkl"
-            encoder_path = model_path / "label_encoder.pkl"
-            
-            if not all([classifier_path.exists(), vectorizer_path.exists(), encoder_path.exists()]):
-                st.warning(f"Models not found. Checked: {model_path}. Please train models first.")
-                return False
-            
-            _self.classifier = joblib.load(classifier_path)
-            _self.vectorizer = joblib.load(vectorizer_path)
-            _self.label_encoder = joblib.load(encoder_path)
-            _self.preprocessor = TextPreprocessor()
-            _self.ranker = ResumeRanker(vectorizer=_self.vectorizer, preprocessor=_self.preprocessor)
-            
-            _self.is_loaded = True
-            return True
-            
-        except Exception as e:
-            st.error(f"Error loading models: {e}")
+    def load_models(self, model_dir: str = None):
+        """Load all required models using cached loader."""
+        models = _load_cached_models(model_dir)
+        
+        if models is None:
             return False
+        
+        self.classifier = models['classifier']
+        self.vectorizer = models['vectorizer']
+        self.label_encoder = models['label_encoder']
+        self.preprocessor = models['preprocessor']
+        self.ranker = models['ranker']
+        self.is_loaded = True
+        return True
 
 
 def extract_skills(text: str) -> List[str]:
@@ -217,21 +237,23 @@ def main():
         models_loaded = model_loader.load_models()
         
         categories = []
-        if models_loaded and model_loader.label_encoder is not None:
-            try:
-                if hasattr(model_loader.label_encoder, 'classes_'):
-                    categories = list(model_loader.label_encoder.classes_)
-                    st.success("✅ Models loaded successfully")
-                    st.info(f"Available categories: {len(categories)}")
-                else:
-                    st.warning("⚠️ Label encoder missing classes attribute")
-            except Exception as e:
-                st.error(f"Error accessing label encoder: {e}")
-                categories = []
-        elif models_loaded:
-            st.warning("⚠️ Models loaded but label encoder is None")
+        if models_loaded:
+            if model_loader.label_encoder is not None:
+                try:
+                    if hasattr(model_loader.label_encoder, 'classes_'):
+                        categories = list(model_loader.label_encoder.classes_)
+                        st.success("✅ Models loaded successfully")
+                        st.info(f"Available categories: {len(categories)}")
+                    else:
+                        st.warning("⚠️ Label encoder missing classes attribute")
+                except Exception as e:
+                    st.error(f"Error accessing label encoder: {e}")
+                    categories = []
+            else:
+                st.error("❌ Models loaded but label encoder is None")
+                st.info("Try restarting the application or retraining models.")
         else:
-            st.error("❌ Models not loaded")
+            st.error("❌ Models not loaded. Please train models first.")
             st.info("Run training script to create models: `python ml_training/train_pipeline.py --sample --sample-size 1000`")
         
         st.divider()
