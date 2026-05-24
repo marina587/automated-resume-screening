@@ -57,21 +57,82 @@ class DataPreparator:
         print(f"Missing values: {results['missing_values']}")
         print(f"Duplicates: {results['duplicates']}")
         print(f"Class distribution:\n{self.df['category'].value_counts() if 'category' in self.df.columns else 'No category column'}")
+        print(f"Available columns: {list(self.df.columns)}")
+        
+        # Auto-detect potential text and category columns
+        possible_text_cols = ['resume_text', 'resume', 'text', 'content', 'description', 'resume_content']
+        possible_cat_cols = ['category', 'label', 'class', 'job_title', 'job_category', 'role', 'designation']
+        
+        detected_text = [col for col in possible_text_cols if col in self.df.columns]
+        detected_cat = [col for col in possible_cat_cols if col in self.df.columns]
+        
+        if detected_text:
+            print(f"✓ Detected text column(s): {detected_text}")
+        if detected_cat:
+            print(f"✓ Detected category column(s): {detected_cat}")
+        if not detected_text or not detected_cat:
+            print("⚠ WARNING: Could not auto-detect required columns. Please check column names.")
         
         return results
     
-    def clean_data(self) -> pd.DataFrame:
+    def clean_data(self, category_column: str = None, text_column: str = None) -> pd.DataFrame:
         """
         Remove missing values and duplicates.
+        
+        Args:
+            category_column: Name of the category column (auto-detected if not provided)
+            text_column: Name of the resume text column (auto-detected if not provided)
         
         Returns:
             Cleaned DataFrame
         """
         if self.df is None:
             raise ValueError("No data loaded")
+        
+        # Auto-detect column names if not provided
+        if text_column is None:
+            # Try common column names for resume text
+            possible_text_cols = ['resume_text', 'resume', 'text', 'content', 'description', 'resume_content']
+            for col in possible_text_cols:
+                if col in self.df.columns:
+                    text_column = col
+                    break
+            if text_column is None:
+                raise ValueError(f"Could not find resume text column. Available columns: {list(self.df.columns)}")
+        
+        if category_column is None:
+            # Try common column names for category - expanded list for Kaggle dataset
+            possible_cat_cols = ['category', 'label', 'class', 'job_title', 'job_category', 'role', 'designation', 'job_role', 'position']
+            for col in possible_cat_cols:
+                if col in self.df.columns:
+                    category_column = col
+                    break
+            if category_column is None:
+                raise ValueError(f"Could not find category column. Available columns: {list(self.df.columns)}")
+        
+        print(f"Using text column: '{text_column}', category column: '{category_column}'")
+        
+        # Rename columns to standard names for consistency
+        rename_map = {}
+        if text_column != 'resume_text':
+            rename_map[text_column] = 'resume_text'
+        if category_column != 'category':
+            rename_map[category_column] = 'category'
+        
+        if rename_map:
+            self.df = self.df.rename(columns=rename_map)
+            print(f"Renamed columns: {rename_map}")
             
+        # Convert resume_text to string to handle any non-string values
+        self.df['resume_text'] = self.df['resume_text'].astype(str)
+        self.df['category'] = self.df['category'].astype(str)
+        
         # Remove rows with missing resume_text or category
         self.df = self.df.dropna(subset=['resume_text', 'category'])
+        
+        # Remove empty strings
+        self.df = self.df[self.df['resume_text'].str.strip() != '']
+        self.df = self.df[self.df['category'].str.strip() != '']
         
         # Remove duplicates
         self.df = self.df.drop_duplicates(subset=['resume_text'])
