@@ -51,8 +51,8 @@ class ModelManager:
         """Load all required models from disk."""
         try:
             import joblib
-            from text_preprocessing import TextPreprocessor
-            from resume_ranking import ResumeRanker
+            from ml_training.text_preprocessing import TextPreprocessor
+            from ml_training.resume_ranking import ResumeRanker
             
             model_path = Path(model_dir) / "logistic_model.pkl"
             vectorizer_path = Path(model_dir) / "vectorizer.pkl"
@@ -139,6 +139,13 @@ class ScreeningResult(BaseModel):
 async def startup_event():
     """Load models on application startup."""
     global model_manager
+    import sys
+    from pathlib import Path
+    # Add workspace to path for ml_training imports
+    workspace_dir = Path(__file__).parent.parent
+    if str(workspace_dir) not in sys.path:
+        sys.path.insert(0, str(workspace_dir))
+    
     model_manager = ModelManager()
     
     # Try to load models (will fail gracefully if not present)
@@ -175,7 +182,7 @@ async def upload_resumes(files: List[UploadFile] = File(...)):
     Returns extracted text for each uploaded file.
     """
     try:
-        from resume_parser import ResumeParser
+        from ml_training.resume_parser import ResumeParser
         
         parser = ResumeParser()
         results = []
@@ -227,8 +234,8 @@ async def screen_resumes(
     4. Returns ranked results with decisions
     """
     try:
-        from resume_parser import ResumeParser
-        from resume_ranking import ApprovalWorkflow, extract_skills_from_text
+        from ml_training.resume_parser import ResumeParser
+        from ml_training.resume_ranking import ApprovalWorkflow, extract_skills_from_text
         
         if not model_manager or not model_manager.is_loaded:
             raise HTTPException(
@@ -279,7 +286,7 @@ async def screen_resumes(
                 prediction = model_manager.predict_category(resume['cleaned_text'])
                 resume['predicted_category'] = prediction['category']
                 resume['category_confidence'] = prediction['confidence']
-            except:
+            except Exception:
                 resume['predicted_category'] = None
                 resume['category_confidence'] = None
         
@@ -334,7 +341,7 @@ async def extract_skills(text: str = Form(...)):
     Extract skills from resume or job description text.
     """
     try:
-        from resume_ranking import extract_skills_from_text
+        from ml_training.resume_ranking import extract_skills_from_text
         
         skills = extract_skills_from_text(text)
         
