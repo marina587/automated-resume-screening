@@ -60,7 +60,7 @@ def run_training_pipeline(
     logger.info(f"Missing values: {explorations['missing_values']}")
     logger.info(f"Duplicates: {explorations['duplicates']}")
     
-    # Clean data
+    # Clean data with auto-detection of column names
     df = preparator.clean_data()
     
     # Step 2: Text Preprocessing
