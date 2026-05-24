@@ -1,0 +1,49 @@
+```
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+*.pot
+*.pyc
+*.pyo
+*.pyd
+.MF
+tags
+TAGS
+*.tmproj
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.vscode/
+.idea/
+
+# Models and data
+models/*.pkl
+data/*.csv
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Dependencies
+venv/
+.venv/
+```

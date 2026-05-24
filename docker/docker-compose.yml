@@ -1,0 +1,86 @@
+# Docker Compose for AI Resume Screening System
+
+version: '3.8'
+
+services:
+  # API Backend Service
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: resume-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../models:/app/models
+      - ../data:/app/data
+      - ../logs:/app/logs
+    environment:
+      - PYTHONPATH=/app
+      - LOG_LEVEL=INFO
+    command: >
+      python -m uvicorn backend.api:app 
+      --host 0.0.0.0 
+      --port 8000 
+      --reload
+    networks:
+      - resume-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Streamlit Frontend Service
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: resume-frontend
+    ports:
+      - "8501:8501"
+    volumes:
+      - ../models:/app/models
+      - ../data:/app/data
+      - ../frontend:/app/frontend
+    environment:
+      - PYTHONPATH=/app
+    command: >
+      streamlit run frontend/app.py 
+      --server.port 8501 
+      --server.address 0.0.0.0 
+      --server.headless true
+    depends_on:
+      - api
+    networks:
+      - resume-network
+
+  # Training Service (one-time job)
+  training:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: resume-training
+    volumes:
+      - ../models:/app/models
+      - ../data:/app/data
+    environment:
+      - PYTHONPATH=/app
+    command: >
+      python ml_training/train_pipeline.py 
+      --sample 
+      --sample-size 1000 
+      --model-type logistic
+    networks:
+      - resume-network
+    profiles:
+      - train
+
+networks:
+  resume-network:
+    driver: bridge
+
+volumes:
+  models:
+  data:
+  logs:
