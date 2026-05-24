@@ -38,10 +38,15 @@ def run_training_pipeline(
     logger.info("Starting Resume Screening Training Pipeline")
     logger.info("=" * 60)
     
-    # Import modules
-    from ml_training.data_preparation import DataPreparator, create_sample_dataset
-    from ml_training.text_preprocessing import TextPreprocessor
-    from ml_training.model_training import ResumeClassifier, compare_models
+    # Import modules - handle both package and direct execution
+    try:
+        from ml_training.data_preparation import DataPreparator, create_sample_dataset
+        from ml_training.text_preprocessing import TextPreprocessor
+        from ml_training.model_training import ResumeClassifier, compare_models
+    except ImportError:
+        from data_preparation import DataPreparator, create_sample_dataset
+        from text_preprocessing import TextPreprocessor
+        from model_training import ResumeClassifier, compare_models
     
     # Step 1: Prepare Data
     logger.info("\n📊 STEP 1: Data Preparation")
@@ -136,9 +141,15 @@ def run_training_pipeline(
 
 def compare_all_models(data_path: str = None, sample_size: int = 500):
     """Compare different models and find the best one."""
-    from ml_training.data_preparation import create_sample_dataset, DataPreparator
-    from ml_training.text_preprocessing import TextPreprocessor
-    from ml_training.model_training import compare_models
+    # Import modules - handle both package and direct execution
+    try:
+        from ml_training.data_preparation import create_sample_dataset, DataPreparator
+        from ml_training.text_preprocessing import TextPreprocessor
+        from ml_training.model_training import compare_models
+    except ImportError:
+        from data_preparation import create_sample_dataset, DataPreparator
+        from text_preprocessing import TextPreprocessor
+        from model_training import compare_models
     
     logger.info("\n🔬 MODEL COMPARISON")
     logger.info("=" * 60)
