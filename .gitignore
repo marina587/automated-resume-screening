@@ -1,1 +1,11 @@
-Nothing needs to be added to .gitignore since only a Python source file (`frontend/app.py`) was modified and there are no build artifacts, dependencies, or temporary files in the changes.
+```
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ML/Training
+ml_training/__pycache__/
+backend/__pycache__/
+```
