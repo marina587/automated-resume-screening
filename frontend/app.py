@@ -91,22 +91,40 @@ class ModelLoader:
         self.is_loaded = False
     
     @st.cache_resource
-    def load_models(_self, model_dir: str = "models"):
+    def load_models(_self, model_dir: str = None):
         """Load all required models."""
         try:
             import joblib
             from ml_training.text_preprocessing import TextPreprocessor
             from ml_training.resume_ranking import ResumeRanker
             
-            model_path = Path(model_dir) / "logistic_model.pkl"
-            vectorizer_path = Path(model_dir) / "vectorizer.pkl"
-            encoder_path = Path(model_dir) / "label_encoder.pkl"
+            # Determine model directory - check multiple locations
+            if model_dir is None:
+                # Try common locations
+                possible_paths = [
+                    Path("models"),
+                    Path(__file__).parent.parent / "models",
+                    Path("/app/models"),
+                    Path("ml_training/models")
+                ]
+                for p in possible_paths:
+                    if p.exists():
+                        model_path = p
+                        break
+                else:
+                    model_path = Path("models")
+            else:
+                model_path = Path(model_dir)
             
-            if not all([model_path.exists(), vectorizer_path.exists(), encoder_path.exists()]):
-                st.warning("Models not found. Please train models first.")
+            classifier_path = model_path / "logistic_model.pkl"
+            vectorizer_path = model_path / "vectorizer.pkl"
+            encoder_path = model_path / "label_encoder.pkl"
+            
+            if not all([classifier_path.exists(), vectorizer_path.exists(), encoder_path.exists()]):
+                st.warning(f"Models not found. Checked: {model_path}. Please train models first.")
                 return False
             
-            _self.classifier = joblib.load(model_path)
+            _self.classifier = joblib.load(classifier_path)
             _self.vectorizer = joblib.load(vectorizer_path)
             _self.label_encoder = joblib.load(encoder_path)
             _self.preprocessor = TextPreprocessor()
@@ -195,10 +213,14 @@ def main():
         
         # Model status
         st.subheader("Model Status")
-        if model_loader.load_models():
+        models_loaded = model_loader.load_models()
+        if models_loaded:
             st.success("✅ Models loaded successfully")
-            categories = list(model_loader.label_encoder.classes_)
-            st.info(f"Available categories: {len(categories)}")
+            if model_loader.label_encoder is not None and hasattr(model_loader.label_encoder, 'classes_'):
+                categories = list(model_loader.label_encoder.classes_)
+                st.info(f"Available categories: {len(categories)}")
+            else:
+                st.warning("⚠️ Label encoder not properly loaded")
         else:
             st.error("❌ Models not loaded")
             st.info("Run training script to create models")
