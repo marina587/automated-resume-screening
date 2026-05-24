@@ -212,18 +212,27 @@ def main():
         st.header("⚙️ Settings")
         
         # Model status
+        # Model Status Section
         st.subheader("Model Status")
         models_loaded = model_loader.load_models()
-        if models_loaded:
-            st.success("✅ Models loaded successfully")
-            if model_loader.label_encoder is not None and hasattr(model_loader.label_encoder, 'classes_'):
-                categories = list(model_loader.label_encoder.classes_)
-                st.info(f"Available categories: {len(categories)}")
-            else:
-                st.warning("⚠️ Label encoder not properly loaded")
+        
+        categories = []
+        if models_loaded and model_loader.label_encoder is not None:
+            try:
+                if hasattr(model_loader.label_encoder, 'classes_'):
+                    categories = list(model_loader.label_encoder.classes_)
+                    st.success("✅ Models loaded successfully")
+                    st.info(f"Available categories: {len(categories)}")
+                else:
+                    st.warning("⚠️ Label encoder missing classes attribute")
+            except Exception as e:
+                st.error(f"Error accessing label encoder: {e}")
+                categories = []
+        elif models_loaded:
+            st.warning("⚠️ Models loaded but label encoder is None")
         else:
             st.error("❌ Models not loaded")
-            st.info("Run training script to create models")
+            st.info("Run training script to create models: `python ml_training/train_pipeline.py --sample --sample-size 1000`")
         
         st.divider()
         
@@ -342,10 +351,22 @@ def main():
                             # Predict category
                             try:
                                 cleaned = model_loader.preprocessor.preprocess(resume['cleaned_text'])
-                                category, confidence = model_loader.classifier.predict_category(cleaned)
+                                
+                                # Check if classifier has predict_category method (ResumeClassifier)
+                                # or if it's a raw sklearn model
+                                if hasattr(model_loader.classifier, 'predict_category'):
+                                    category, confidence = model_loader.classifier.predict_category(cleaned)
+                                else:
+                                    # It's a raw sklearn model - need to use vectorizer and label_encoder
+                                    vectorized = model_loader.vectorizer.transform([cleaned])
+                                    pred_idx = model_loader.classifier.predict(vectorized)[0]
+                                    probs = model_loader.classifier.predict_proba(vectorized)[0]
+                                    confidence = float(max(probs))
+                                    category = model_loader.label_encoder.inverse_transform([pred_idx])[0]
+                                
                                 resume['predicted_category'] = category
                                 resume['category_confidence'] = confidence
-                            except Exception:
+                            except Exception as e:
                                 resume['predicted_category'] = 'Unknown'
                                 resume['category_confidence'] = 0.0
                         
