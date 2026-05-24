@@ -323,7 +323,7 @@ def main():
                                 category, confidence = model_loader.classifier.predict_category(cleaned)
                                 resume['predicted_category'] = category
                                 resume['category_confidence'] = confidence
-                            except:
+                            except Exception:
                                 resume['predicted_category'] = 'Unknown'
                                 resume['category_confidence'] = 0.0
                         
