@@ -82,11 +82,21 @@ class ModelManager:
             raise ValueError("Models not loaded")
         
         cleaned_text = self.preprocessor.preprocess(text)
-        category, confidence = self.classifier.predict_category(cleaned_text)
+        
+        # Vectorize the text
+        X = self.vectorizer.transform([cleaned_text])
+        
+        # Get prediction and probabilities from the sklearn model
+        prediction = self.classifier.predict(X)[0]
+        probabilities = self.classifier.predict_proba(X)[0]
+        
+        # Convert encoded prediction back to label
+        category = self.label_encoder.inverse_transform([prediction])[0]
+        confidence = float(probabilities.max())
         
         return {
             "category": category,
-            "confidence": float(confidence),
+            "confidence": confidence,
             "cleaned_text": cleaned_text
         }
     
