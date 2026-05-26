@@ -119,8 +119,12 @@ class ModelLoader:
 
 
 @st.cache_resource
-def load_cached_models(model_dir: str = "models"):
+def load_cached_models(model_dir: str = None):
     """Cached function to load models."""
+    if model_dir is None:
+        # Default to parent directory's models folder
+        model_dir = str(Path(__file__).parent.parent / "models")
+    
     try:
         import joblib
         from ml_training.text_preprocessing import TextPreprocessor
@@ -145,8 +149,10 @@ def load_cached_models(model_dir: str = "models"):
         return False, None, None, None, None, None
 
 
-def load_models_for_instance(model_loader: ModelLoader, model_dir: str = "models"):
+def load_models_for_instance(model_loader: ModelLoader, model_dir: str = None):
     """Wrapper to load models and assign to instance."""
+    if model_dir is None:
+        model_dir = str(Path(__file__).parent.parent / "models")
     result = load_cached_models(model_dir)
     if result[0]:
         model_loader.is_loaded, model_loader.classifier, model_loader.vectorizer, \
