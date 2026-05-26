@@ -195,10 +195,11 @@ def main():
         
         # Model status
         st.subheader("Model Status")
-        if model_loader.load_models():
+        if model_loader.load_models(model_loader):
             st.success("✅ Models loaded successfully")
-            categories = list(model_loader.label_encoder.classes_)
-            st.info(f"Available categories: {len(categories)}")
+            if model_loader.label_encoder is not None:
+                categories = list(model_loader.label_encoder.classes_)
+                st.info(f"Available categories: {len(categories)}")
         else:
             st.error("❌ Models not loaded")
             st.info("Run training script to create models")
