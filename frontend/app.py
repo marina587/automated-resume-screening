@@ -90,8 +90,7 @@ class ModelLoader:
         self.ranker = None
         self.is_loaded = False
     
-    @st.cache_resource
-    def load_models(model_dir: str = "models"):
+    def load_models(self, model_dir: str = "models"):
         """Load all required models."""
         try:
             import joblib
@@ -104,7 +103,7 @@ class ModelLoader:
             
             if not all([model_path.exists(), vectorizer_path.exists(), encoder_path.exists()]):
                 st.warning("Models not found. Please train models first.")
-                return False, None, None, None, None
+                return False, None, None, None, None, None
             
             classifier = joblib.load(model_path)
             vectorizer = joblib.load(vectorizer_path)
@@ -119,9 +118,36 @@ class ModelLoader:
             return False, None, None, None, None, None
 
 
+@st.cache_resource
+def load_cached_models(model_dir: str = "models"):
+    """Cached function to load models."""
+    try:
+        import joblib
+        from ml_training.text_preprocessing import TextPreprocessor
+        from ml_training.resume_ranking import ResumeRanker
+        
+        model_path = Path(model_dir) / "logistic_model.pkl"
+        vectorizer_path = Path(model_dir) / "vectorizer.pkl"
+        encoder_path = Path(model_dir) / "label_encoder.pkl"
+        
+        if not all([model_path.exists(), vectorizer_path.exists(), encoder_path.exists()]):
+            return False, None, None, None, None, None
+        
+        classifier = joblib.load(model_path)
+        vectorizer = joblib.load(vectorizer_path)
+        label_encoder = joblib.load(encoder_path)
+        preprocessor = TextPreprocessor()
+        ranker = ResumeRanker(vectorizer=vectorizer, preprocessor=preprocessor)
+        
+        return True, classifier, vectorizer, label_encoder, preprocessor, ranker
+        
+    except Exception as e:
+        return False, None, None, None, None, None
+
+
 def load_models_for_instance(model_loader: ModelLoader, model_dir: str = "models"):
     """Wrapper to load models and assign to instance."""
-    result = ModelLoader.load_models(model_dir)
+    result = load_cached_models(model_dir)
     if result[0]:
         model_loader.is_loaded, model_loader.classifier, model_loader.vectorizer, \
             model_loader.label_encoder, model_loader.preprocessor, model_loader.ranker = result
