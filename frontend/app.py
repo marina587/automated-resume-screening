@@ -91,7 +91,7 @@ class ModelLoader:
         self.is_loaded = False
     
     @st.cache_resource
-    def load_models(_self, model_dir: str = "models"):
+    def load_models(model_dir: str = "models"):
         """Load all required models."""
         try:
             import joblib
@@ -104,20 +104,29 @@ class ModelLoader:
             
             if not all([model_path.exists(), vectorizer_path.exists(), encoder_path.exists()]):
                 st.warning("Models not found. Please train models first.")
-                return False
+                return False, None, None, None, None
             
-            _self.classifier = joblib.load(model_path)
-            _self.vectorizer = joblib.load(vectorizer_path)
-            _self.label_encoder = joblib.load(encoder_path)
-            _self.preprocessor = TextPreprocessor()
-            _self.ranker = ResumeRanker(vectorizer=_self.vectorizer, preprocessor=_self.preprocessor)
+            classifier = joblib.load(model_path)
+            vectorizer = joblib.load(vectorizer_path)
+            label_encoder = joblib.load(encoder_path)
+            preprocessor = TextPreprocessor()
+            ranker = ResumeRanker(vectorizer=vectorizer, preprocessor=preprocessor)
             
-            _self.is_loaded = True
-            return True
+            return True, classifier, vectorizer, label_encoder, preprocessor, ranker
             
         except Exception as e:
             st.error(f"Error loading models: {e}")
-            return False
+            return False, None, None, None, None, None
+
+
+def load_models_for_instance(model_loader: ModelLoader, model_dir: str = "models"):
+    """Wrapper to load models and assign to instance."""
+    result = ModelLoader.load_models(model_dir)
+    if result[0]:
+        model_loader.is_loaded, model_loader.classifier, model_loader.vectorizer, \
+            model_loader.label_encoder, model_loader.preprocessor, model_loader.ranker = result
+        return True
+    return False
 
 
 def extract_skills(text: str) -> List[str]:
@@ -195,7 +204,7 @@ def main():
         
         # Model status
         st.subheader("Model Status")
-        if model_loader.load_models(model_loader):
+        if load_models_for_instance(model_loader):
             st.success("✅ Models loaded successfully")
             if model_loader.label_encoder is not None:
                 categories = list(model_loader.label_encoder.classes_)

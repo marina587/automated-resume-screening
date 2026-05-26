@@ -1,1 +1,23 @@
-(frontend/app.py is a source file, and there are no build artifacts, dependencies, or temporary files in the changes)
+```
+# Compiled Python files
+__pycache__/
+*.pyc
+
+# Dependencies
+venv/
+.venv/
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+
+# Environment
+.env
+.env.local
+.env.*
+
+# Editors
+.vscode/
+.idea/
+```
