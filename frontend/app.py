@@ -357,9 +357,11 @@ def main():
                                 pred = model_loader.predict_category(raw)
                                 resume['predicted_category'] = pred['category']
                                 resume['category_confidence'] = pred['confidence']
-                            except Exception:
+                                resume['prediction_error'] = None
+                            except Exception as e:
                                 resume['predicted_category'] = 'Unknown'
                                 resume['category_confidence'] = 0.0
+                                resume['prediction_error'] = str(e)
                         
                         # Display summary
                         st.divider()
@@ -409,6 +411,8 @@ def main():
                                     if resume.get('predicted_category'):
                                         conf_pct = resume['category_confidence'] * 100
                                         st.caption(f"Predicted Category: {resume['predicted_category']} ({conf_pct:.1f}% confidence)")
+                                    if resume.get('prediction_error'):
+                                        st.caption(f"Prediction error: {resume['prediction_error']}")
                                 
                                 with col2:
                                     st.markdown(f"""

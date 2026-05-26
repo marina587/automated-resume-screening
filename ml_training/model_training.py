@@ -144,6 +144,7 @@ class ResumeClassifier:
         label_column: str = 'category',
         test_size: float = 0.2,
         data_source_column: str = 'data_source',
+        calibrate: bool = True,
     ) -> Dict[str, Any]:
         """
         Train with proper train/test split (no leakage on vectorizer).
@@ -222,6 +223,18 @@ class ResumeClassifier:
 
         self.model = self._create_model()
         self.model.fit(X_train, y_train)
+        
+        # Optionally calibrate to improve confidence accuracy
+        if calibrate and len(y_train) >= 30:  # Need sufficient data for calibration
+            from sklearn.calibration import CalibratedClassifierCV
+            self.model = CalibratedClassifierCV(
+                self.model, 
+                method='sigmoid',  # Works with any classifier
+                cv=5
+            )
+            self.model.fit(X_train, y_train)
+            print("✓ Model calibrated with CalibratedClassifierCV (sigmoid method)")
+        
         y_pred = self.model.predict(X_test)
 
         all_label_ids = list(range(len(self.label_encoder.classes_)))

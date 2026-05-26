@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+import logging
 
 import joblib
 import numpy as np
@@ -44,6 +45,7 @@ class ModelBundle:
         )
         self.ranker = ResumeRanker(preprocessor=self.preprocessor)
         self.is_loaded = False
+        self.logger = logging.getLogger(__name__)
 
     def load(self) -> bool:
         model_path = self.model_dir / "logistic_model.pkl"
@@ -92,12 +94,38 @@ class ModelBundle:
         cleaned_text = self.preprocessor.preprocess(text)
         X = self._build_features(cleaned_text, text)
         prediction = self.classifier.predict(X)[0]
-        probabilities = self.classifier.predict_proba(X)[0]
+
+        confidence = 0.0
+        try:
+            probabilities = self.classifier.predict_proba(X)[0]
+            confidence = float(np.max(probabilities))
+        except Exception as e:
+            self.logger.warning(
+                "predict_proba failed for %s: %s",
+                type(self.classifier).__name__,
+                e,
+            )
+            try:
+                decision = self.classifier.decision_function(X)
+                decision = np.asarray(decision)
+                if decision.ndim == 1:
+                    confidence = float(1 / (1 + np.exp(-decision[0])))
+                else:
+                    raw = decision[0].astype(float)
+                    exp = np.exp(raw - np.max(raw))
+                    confidence = float(np.max(exp / np.sum(exp)))
+            except Exception as exc:
+                self.logger.debug(
+                    "decision_function fallback failed for %s: %s",
+                    type(self.classifier).__name__,
+                    exc,
+                )
+
         category = self.label_encoder.inverse_transform([prediction])[0]
 
         return {
             "category": category,
-            "confidence": float(probabilities.max()),
+            "confidence": confidence,
             "cleaned_text": cleaned_text,
             "categorization_backend": self.categorization_backend,
         }
