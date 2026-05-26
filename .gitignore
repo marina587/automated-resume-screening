@@ -28,4 +28,7 @@ htmlcov/
 dist/
 build/
 target/
+
+# Downloaded / generated datasets (re-create via load_hf_dataset.py)
+data/hf_resume_screening.csv
 ```

@@ -4,10 +4,10 @@ A comprehensive machine learning system for automated resume screening, categori
 
 ## 📋 Features
 
-- **Resume Parsing**: Extract text from PDF and DOCX files
-- **Text Preprocessing**: Clean, normalize, and tokenize resume text
-- **Job Category Classification**: Automatically categorize resumes into job roles
-- **Similarity Ranking**: Rank resumes based on job description match
+- **Resume Parsing**: PyMuPDF + spaCy `en_core_web_sm` (~15MB)
+- **Text Preprocessing**: Section-aware cleaning with technical term preservation
+- **Job Category Classification**: MiniLM embeddings + logistic regression (&lt;100MB), or TF-IDF fallback
+- **Similarity Ranking**: `sentence-transformers/all-MiniLM-L6-v2` (~90MB)
 - **Skill Extraction**: Identify and match technical skills
 - **Approval Workflow**: Automatic shortlist/review/reject decisions
 - **Web Interface**: Interactive Streamlit dashboard for recruiters
@@ -41,8 +41,9 @@ A comprehensive machine learning system for automated resume screening, categori
 │
 ├── models/                # Trained models
 │   ├── logistic_model.pkl
-│   ├── vectorizer.pkl
-│   └── label_encoder.pkl
+│   ├── label_encoder.pkl
+│   ├── model_config.json  # minilm | tfidf + ranking model id
+│   └── feature_extractor.pkl (optional structured features)
 │
 └── requirements.txt       # Python dependencies
 ```
@@ -59,11 +60,26 @@ python -m spacy download en_core_web_sm
 ### 2. Train Models
 
 ```bash
-# Train with sample data (for testing)
+# Train on Hugging Face dataset (~10k resumes, 45 job roles)
+python ml_training/train_pipeline.py --hf
+
+# Quick HF smoke test (subset)
+python ml_training/train_pipeline.py --hf --hf-max-rows 2000
+
+# Download/adapt only (writes data/hf_resume_screening.csv)
+python ml_training/load_hf_dataset.py
+
+# Train with sample data (MiniLM categorization, default)
 python ml_training/train_pipeline.py --sample --sample-size 1000
 
-# Train with your own dataset
+# TF-IDF categorization fallback (<100MB, no sentence-transformers at inference)
+python ml_training/train_pipeline.py --sample --feature-backend tfidf
+
+# Train with your own CSV (columns: resume_text, category)
 python ml_training/train_pipeline.py --data path/to/resumes.csv --model-type logistic
+
+# Re-train from saved HF CSV without re-downloading
+python ml_training/train_pipeline.py --data data/hf_resume_screening.csv
 ```
 
 ### 3. Run the Application
@@ -136,28 +152,27 @@ for candidate in results['results']:
 - Analyze class distribution
 
 ### Phase 2: Text Extraction
-- Parse PDF files using pdfminer.six
-- Parse DOCX files using python-docx
-- Batch processing support
+- PDF: **PyMuPDF** (`fitz`)
+- Refinement: **spaCy** `en_core_web_sm`
+- DOCX: python-docx
 
 ### Phase 3: Text Preprocessing
-- Remove special characters, URLs, emails
-- Convert to lowercase
-- Remove stopwords
-- Lemmatization/stemming
+- Preserve tech terms (C++, C#, .NET, version numbers)
+- Section-aware weighting (experience/skills emphasized)
+- spaCy lemmatization when enabled
 
 ### Phase 4: Feature Engineering
-- TF-IDF vectorization (max 5000 features)
+- **Categorization (default):** `all-MiniLM-L6-v2` embeddings + structured resume features
+- **Categorization (fallback):** TF-IDF + structured features (`--feature-backend tfidf`)
 - Label encoding for categories
 
 ### Phase 5: Model Training
-- Logistic Regression (default)
-- Random Forest, SVM, KNN alternatives
-- Stratified train/test split
-- Accuracy, F1-score evaluation
+- Logistic Regression on embedding/TF-IDF features (default)
+- Stratified train/test split + optional holdout evaluation
+- Saves `model_config.json` describing the stack
 
 ### Phase 6: Ranking
-- Cosine similarity with job description
+- Semantic cosine similarity via **all-MiniLM-L6-v2**
 - Skill-based matching
 - Weighted combined scoring
 

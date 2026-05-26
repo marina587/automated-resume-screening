@@ -3,11 +3,14 @@ Training Pipeline Script
 End-to-end training pipeline for the resume screening system.
 """
 
+# %% GPU check for Colab
+import torch
+print(torch.cuda.is_available())
+
 import argparse
 from pathlib import Path
 import logging
 
-# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
@@ -18,130 +21,163 @@ logger = logging.getLogger(__name__)
 def run_training_pipeline(
     data_path: str = None,
     output_dir: str = 'models',
-    max_features: int = 5000,
+    max_features: int = 8000,
     model_type: str = 'logistic',
     create_sample: bool = False,
-    sample_size: int = 1000
+    use_hf_dataset: bool = False,
+    hf_max_rows: int = None,
+    sample_size: int = 1000,
+    balance_classes: bool = True,
+    force_balance: bool = False,
+    feature_backend: str = 'minilm',
 ):
     """
     Run the complete training pipeline.
-    
-    Args:
-        data_path: Path to CSV dataset
-        output_dir: Directory to save trained models
-        max_features: Maximum TF-IDF features
-        model_type: Type of model to train
-        create_sample: Whether to create sample dataset
-        sample_size: Size of sample dataset if created
     """
     logger.info("=" * 60)
     logger.info("Starting Resume Screening Training Pipeline")
     logger.info("=" * 60)
-    
-    # Import modules - handle both package and direct execution
+
     try:
         from ml_training.data_preparation import DataPreparator, create_sample_dataset
         from ml_training.text_preprocessing import TextPreprocessor
-        from ml_training.model_training import ResumeClassifier, compare_models
+        from ml_training.model_training import ResumeClassifier
     except ImportError:
         from data_preparation import DataPreparator, create_sample_dataset
         from text_preprocessing import TextPreprocessor
-        from model_training import ResumeClassifier, compare_models
-    
-    # Step 1: Prepare Data
+        from model_training import ResumeClassifier
+
     logger.info("\n📊 STEP 1: Data Preparation")
     logger.info("-" * 40)
-    
-    if create_sample or data_path is None:
-        logger.info("Creating sample dataset...")
+
+    if use_hf_dataset:
+        try:
+            from ml_training.load_hf_dataset import download_and_prepare
+        except ImportError:
+            from load_hf_dataset import download_and_prepare
+        logger.info("Downloading Hugging Face Resume-Screening-Dataset...")
+        data_path = download_and_prepare(max_rows=hf_max_rows)
+    elif create_sample or data_path is None:
+        logger.info("Creating varied sample dataset with holdout split...")
         data_path = create_sample_dataset(n_samples=sample_size)
-    
+
     preparator = DataPreparator(data_path)
     df = preparator.load_data()
-    
-    # Explore data
+
     explorations = preparator.explore_data()
     logger.info(f"Dataset shape: {explorations['shape']}")
-    logger.info(f"Missing values: {explorations['missing_values']}")
-    logger.info(f"Duplicates: {explorations['duplicates']}")
-    
-    # Clean data with auto-detection of column names
+    if explorations.get('imbalance_ratio'):
+        logger.info(f"Class imbalance ratio: {explorations['imbalance_ratio']:.2f}")
+
     df = preparator.clean_data()
-    
-    # Step 2: Text Preprocessing
+
+    if 'data_source' not in df.columns:
+        df = preparator.assign_data_source(holdout_fraction=0.2)
+    else:
+        preparator.df = df
+
+    n_rows = len(df)
+    if balance_classes and n_rows > 5000 and not force_balance:
+        logger.info(
+            f"Skipping oversampling balance on large dataset ({n_rows} rows). "
+            "Use --balance to force class balancing."
+        )
+        balance_classes = False
+
+    if balance_classes:
+        logger.info("Balancing train split only (preserving holdout)...")
+        df = preparator.balance_classes(strategy='oversample', only_train=True)
+        n_rows = len(df)
+        logger.info(f"Rows after balancing: {n_rows}")
+
     logger.info("\n🧹 STEP 2: Text Preprocessing")
     logger.info("-" * 40)
-    
-    preprocessor = TextPreprocessor(use_lemmatization=True)
-    logger.info("Preprocessing resume texts...")
-    
+
+    use_spacy_preprocess = n_rows <= 3000
+    if not use_spacy_preprocess:
+        logger.info(f"Fast preprocessing (no spaCy) for {n_rows} resumes")
+
+    preprocessor = TextPreprocessor(
+        use_spacy=use_spacy_preprocess,
+        use_lemmatization=True,
+        preserve_technical_terms=True,
+        section_aware=True,
+    )
     df['cleaned_text'] = df['resume_text'].apply(preprocessor.preprocess)
     logger.info(f"Preprocessed {len(df)} resumes")
-    
-    # Sample of cleaned text
     logger.info(f"Sample cleaned text:\n{df['cleaned_text'].iloc[0][:200]}...")
-    
-    # Save cleaned data
+
     cleaned_path = Path('data/resumes_cleaned.csv')
     cleaned_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(cleaned_path, index=False)
     logger.info(f"Saved cleaned data to {cleaned_path}")
-    
-    # Step 3: Model Training
+
     logger.info("\n🤖 STEP 3: Model Training")
     logger.info("-" * 40)
-    
-    classifier = ResumeClassifier(max_features=max_features, model_type=model_type)
-    metrics = classifier.train(df, text_column='cleaned_text', label_column='category')
-    
-    # Step 4: Save Models
+
+    logger.info(f"Categorization backend: {feature_backend}")
+    classifier = ResumeClassifier(
+        max_features=max_features,
+        model_type=model_type,
+        use_structured_features=True,
+        feature_backend=feature_backend,
+    )
+    metrics = classifier.train(
+        df,
+        text_column='cleaned_text',
+        raw_text_column='resume_text',
+        label_column='category',
+    )
+
     logger.info("\n💾 STEP 4: Saving Models")
     logger.info("-" * 40)
-    
+
     saved_paths = classifier.save(model_dir=output_dir)
-    logger.info(f"Model files saved:")
     for name, path in saved_paths.items():
         logger.info(f"  - {name}: {path}")
-    
-    # Step 5: Validation
+
     logger.info("\n✅ STEP 5: Validation")
     logger.info("-" * 40)
-    
-    # Test prediction
-    test_texts = [
-        "experienced software engineer python java machine learning aws docker kubernetes",
-        "data scientist with expertise in tensorflow pytorch statistical analysis deep learning",
-        "product manager agile methodologies user research product strategy leadership"
+
+    test_cases = [
+        (
+            "Senior Software Engineer with 8+ years in C++, C#, .NET, Python 3.11, "
+            "AWS, Docker, Kubernetes, and CI/CD.",
+            None,
+        ),
+        (
+            "Data scientist — TensorFlow 2.x, PyTorch, ML, NLP, statistical modeling, 5 years.",
+            None,
+        ),
+        (
+            "UX designer: Figma, user research, wireframes, UI/UX, 4 years experience.",
+            None,
+        ),
     ]
-    
-    logger.info("Testing predictions:")
-    for text in test_texts:
-        prediction, confidence = classifier.predict_category(text)
-        logger.info(f"  Input: {text[:50]}...")
+
+    for raw_text, _ in test_cases:
+        cleaned = preprocessor.preprocess(raw_text)
+        prediction, confidence = classifier.predict_category(cleaned, raw_text=raw_text)
+        logger.info(f"  Input: {raw_text[:55]}...")
         logger.info(f"  Predicted: {prediction} (confidence: {confidence:.2%})")
-    
-    # Summary
+
     logger.info("\n" + "=" * 60)
     logger.info("TRAINING PIPELINE COMPLETED SUCCESSFULLY")
     logger.info("=" * 60)
-    logger.info(f"\nFinal Metrics:")
     logger.info(f"  - Accuracy: {metrics['accuracy']:.4f}")
     logger.info(f"  - F1 Score (macro): {metrics['f1_macro']:.4f}")
-    logger.info(f"  - Number of classes: {len(metrics['classes'])}")
-    logger.info(f"  - Features: {metrics['n_features']}")
-    logger.info(f"\nModels saved to: {output_dir}/")
-    logger.info(f"Cleaned data saved to: {cleaned_path}")
-    
+    if metrics.get('holdout_metrics'):
+        hm = metrics['holdout_metrics']
+        logger.info(f"  - Holdout accuracy: {hm['accuracy']:.4f} (n={hm['size']})")
+
     return {
         'metrics': metrics,
         'model_paths': saved_paths,
-        'cleaned_data_path': str(cleaned_path)
+        'cleaned_data_path': str(cleaned_path),
     }
 
 
 def compare_all_models(data_path: str = None, sample_size: int = 500):
-    """Compare different models and find the best one."""
-    # Import modules - handle both package and direct execution
     try:
         from ml_training.data_preparation import create_sample_dataset, DataPreparator
         from ml_training.text_preprocessing import TextPreprocessor
@@ -150,84 +186,59 @@ def compare_all_models(data_path: str = None, sample_size: int = 500):
         from data_preparation import create_sample_dataset, DataPreparator
         from text_preprocessing import TextPreprocessor
         from model_training import compare_models
-    
-    logger.info("\n🔬 MODEL COMPARISON")
-    logger.info("=" * 60)
-    
-    # Prepare data
+
     if data_path is None:
         data_path = create_sample_dataset(n_samples=sample_size)
-    
+
     preparator = DataPreparator(data_path)
     df = preparator.load_data()
     df = preparator.clean_data()
-    
-    # Preprocess
-    preprocessor = TextPreprocessor(use_lemmatization=True)
+    df = preparator.balance_classes()
+
+    preprocessor = TextPreprocessor(section_aware=True)
     df['cleaned_text'] = df['resume_text'].apply(preprocessor.preprocess)
-    
-    # Compare models
-    results = compare_models(df, text_column='cleaned_text', label_column='category')
-    
-    # Print comparison summary
-    logger.info("\n📊 MODEL COMPARISON SUMMARY")
-    logger.info("-" * 40)
-    logger.info(f"{'Model':<20} {'Accuracy':<12} {'F1 Macro':<12}")
-    logger.info("-" * 40)
-    
-    for model_name, metrics in results.items():
-        logger.info(f"{model_name.upper():<20} {metrics['accuracy']:<12.4f} {metrics['f1_macro']:<12.4f}")
-    
-    return results
+
+    return compare_models(df, text_column='cleaned_text', label_column='category')
 
 
 def main():
     parser = argparse.ArgumentParser(description='Train Resume Screening Models')
-    
+    parser.add_argument('--data', '-d', type=str, default=None)
+    parser.add_argument('--output', '-o', type=str, default='models')
+    parser.add_argument('--max-features', '-f', type=int, default=8000)
+    parser.add_argument('--model-type', '-m', type=str, default='logistic',
+                        choices=['logistic', 'random_forest', 'svm', 'knn'])
+    parser.add_argument('--compare', '-c', action='store_true')
+    parser.add_argument('--sample', '-s', action='store_true')
     parser.add_argument(
-        '--data', '-d',
-        type=str,
+        '--hf',
+        action='store_true',
+        help='Train on AzharAli05/Resume-Screening-Dataset from Hugging Face',
+    )
+    parser.add_argument(
+        '--hf-max-rows',
+        type=int,
         default=None,
-        help='Path to training data CSV'
+        help='Limit HF rows (for quick tests); default uses full ~10k dataset',
     )
+    parser.add_argument('--sample-size', type=int, default=1000)
+    parser.add_argument('--no-balance', action='store_true',
+                        help='Skip class balancing oversampling')
     parser.add_argument(
-        '--output', '-o',
-        type=str,
-        default='models',
-        help='Output directory for models'
-    )
-    parser.add_argument(
-        '--max-features', '-f',
-        type=int,
-        default=5000,
-        help='Maximum number of TF-IDF features'
-    )
-    parser.add_argument(
-        '--model-type', '-m',
-        type=str,
-        default='logistic',
-        choices=['logistic', 'random_forest', 'svm', 'knn'],
-        help='Type of model to train'
-    )
-    parser.add_argument(
-        '--compare', '-c',
+        '--balance',
         action='store_true',
-        help='Compare all models instead of training one'
+        help='Force oversampling balance even on large datasets (>5000 rows)',
     )
     parser.add_argument(
-        '--sample', '-s',
-        action='store_true',
-        help='Create sample dataset for testing'
+        '--feature-backend',
+        type=str,
+        default='minilm',
+        choices=['minilm', 'tfidf'],
+        help='Categorization: minilm (MiniLM embeddings) or tfidf',
     )
-    parser.add_argument(
-        '--sample-size',
-        type=int,
-        default=1000,
-        help='Size of sample dataset'
-    )
-    
+
     args = parser.parse_args()
-    
+
     if args.compare:
         compare_all_models(data_path=args.data, sample_size=args.sample_size)
     else:
@@ -237,7 +248,12 @@ def main():
             max_features=args.max_features,
             model_type=args.model_type,
             create_sample=args.sample,
-            sample_size=args.sample_size
+            use_hf_dataset=args.hf,
+            hf_max_rows=args.hf_max_rows,
+            sample_size=args.sample_size,
+            balance_classes=not args.no_balance,
+            force_balance=args.balance,
+            feature_backend=args.feature_backend,
         )
 
 

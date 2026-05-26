@@ -17,8 +17,8 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Download spaCy language model
-RUN python -m spacy download en_core_web_sm || true
+# spaCy sm for parsing (~15MB); MiniLM downloads on first run
+RUN python -m spacy download en_core_web_sm
 
 # Copy application code
 COPY . .

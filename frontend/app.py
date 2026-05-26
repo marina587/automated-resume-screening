@@ -81,51 +81,29 @@ st.markdown("""
 
 @st.cache_resource
 def _load_cached_models(model_dir: str = None):
-    """Cached function to load all required models."""
+    """Cached loader: MiniLM categorization + all-MiniLM-L6-v2 ranking."""
     try:
-        import joblib
-        from ml_training.text_preprocessing import TextPreprocessor
-        from ml_training.resume_ranking import ResumeRanker
-        
-        # Determine model directory - check multiple locations
+        from ml_training.inference import ModelBundle
+
         if model_dir is None:
-            # Try common locations
             possible_paths = [
                 Path("models"),
                 Path(__file__).parent.parent / "models",
                 Path("/app/models"),
-                Path("ml_training/models")
             ]
+            model_path = Path("models")
             for p in possible_paths:
-                if p.exists():
+                if (p / "logistic_model.pkl").exists():
                     model_path = p
                     break
-            else:
-                model_path = Path("models")
         else:
             model_path = Path(model_dir)
-        
-        classifier_path = model_path / "logistic_model.pkl"
-        vectorizer_path = model_path / "vectorizer.pkl"
-        encoder_path = model_path / "label_encoder.pkl"
-        
-        if not all([classifier_path.exists(), vectorizer_path.exists(), encoder_path.exists()]):
+
+        bundle = ModelBundle(str(model_path))
+        if not bundle.load():
             return None
-        
-        classifier = joblib.load(classifier_path)
-        vectorizer = joblib.load(vectorizer_path)
-        label_encoder = joblib.load(encoder_path)
-        preprocessor = TextPreprocessor()
-        ranker = ResumeRanker(vectorizer=vectorizer, preprocessor=preprocessor)
-        
-        return {
-            'classifier': classifier,
-            'vectorizer': vectorizer,
-            'label_encoder': label_encoder,
-            'preprocessor': preprocessor,
-            'ranker': ranker
-        }
-        
+        return bundle
+
     except Exception as e:
         st.error(f"Error loading models: {e}")
         return None
@@ -133,29 +111,29 @@ def _load_cached_models(model_dir: str = None):
 
 class ModelLoader:
     """Handles loading of ML models for the frontend."""
-    
+
     def __init__(self):
-        self.classifier = None
-        self.vectorizer = None
-        self.label_encoder = None
-        self.preprocessor = None
-        self.ranker = None
+        self.bundle = None
         self.is_loaded = False
-    
+
+    @property
+    def ranker(self):
+        return self.bundle.ranker if self.bundle else None
+
+    @property
+    def preprocessor(self):
+        return self.bundle.preprocessor if self.bundle else None
+
     def load_models(self, model_dir: str = None):
-        """Load all required models using cached loader."""
-        models = _load_cached_models(model_dir)
-        
-        if models is None:
+        bundle = _load_cached_models(model_dir)
+        if bundle is None:
             return False
-        
-        self.classifier = models['classifier']
-        self.vectorizer = models['vectorizer']
-        self.label_encoder = models['label_encoder']
-        self.preprocessor = models['preprocessor']
-        self.ranker = models['ranker']
+        self.bundle = bundle
         self.is_loaded = True
         return True
+
+    def predict_category(self, text: str):
+        return self.bundle.predict_category(text)
 
 
 def extract_skills(text: str) -> List[str]:
@@ -370,25 +348,12 @@ def main():
                                 review_threshold
                             )
                             
-                            # Predict category
                             try:
-                                cleaned = model_loader.preprocessor.preprocess(resume['cleaned_text'])
-                                
-                                # Check if classifier has predict_category method (ResumeClassifier)
-                                # or if it's a raw sklearn model
-                                if hasattr(model_loader.classifier, 'predict_category'):
-                                    category, confidence = model_loader.classifier.predict_category(cleaned)
-                                else:
-                                    # It's a raw sklearn model - need to use vectorizer and label_encoder
-                                    vectorized = model_loader.vectorizer.transform([cleaned])
-                                    pred_idx = model_loader.classifier.predict(vectorized)[0]
-                                    probs = model_loader.classifier.predict_proba(vectorized)[0]
-                                    confidence = float(max(probs))
-                                    category = model_loader.label_encoder.inverse_transform([pred_idx])[0]
-                                
-                                resume['predicted_category'] = category
-                                resume['category_confidence'] = confidence
-                            except Exception as e:
+                                raw = resume.get('text', resume.get('cleaned_text', ''))
+                                pred = model_loader.predict_category(raw)
+                                resume['predicted_category'] = pred['category']
+                                resume['category_confidence'] = pred['confidence']
+                            except Exception:
                                 resume['predicted_category'] = 'Unknown'
                                 resume['category_confidence'] = 0.0
                         
