@@ -24,22 +24,13 @@ from sklearn.metrics import (
     f1_score,
 )
 
-try:
-    from .resume_features import ResumeFeatureExtractor
-    from .embedding_models import (
-        CATEGORIZATION_MODEL_ID,
-        embed_texts,
-        save_model_config,
-        load_model_config,
-    )
-except ImportError:
-    from resume_features import ResumeFeatureExtractor
-    from embedding_models import (
-        CATEGORIZATION_MODEL_ID,
-        embed_texts,
-        save_model_config,
-        load_model_config,
-    )
+from .resume_features import ResumeFeatureExtractor
+from .embedding_models import (
+    CATEGORIZATION_MODEL_ID,
+    embed_texts,
+    save_model_config,
+    load_model_config,
+)
 
 
 class ResumeClassifier:
@@ -184,15 +175,29 @@ class ResumeClassifier:
         )
         train_labels = train_df[label_column].tolist()
 
-        y = self.encode_labels(train_labels, fit=True)
+        # Fit label encoding on the full dataset so holdout classes are supported
+        self.encode_labels(df[label_column].tolist(), fit=True)
+        y = self.encode_labels(train_labels, fit=False)
 
         indices = np.arange(len(train_texts))
-        train_idx, test_idx = train_test_split(
-            indices,
-            test_size=test_size,
-            random_state=42,
-            stratify=y,
-        )
+        try:
+            train_idx, test_idx = train_test_split(
+                indices,
+                test_size=test_size,
+                random_state=42,
+                stratify=y,
+            )
+        except ValueError as exc:
+            print(
+                "Warning: could not stratify train/test split due to small or "
+                "imbalanced class counts. Falling back to random split."
+            )
+            train_idx, test_idx = train_test_split(
+                indices,
+                test_size=test_size,
+                random_state=42,
+                stratify=None,
+            )
 
         if self.feature_backend == 'minilm':
             print(f"Encoding {len(train_texts)} training resumes with MiniLM (one pass)...")
@@ -202,6 +207,7 @@ class ResumeClassifier:
             X_train = X_all[train_idx]
             X_test = X_all[test_idx]
         else:
+            print(f"Extracting TF-IDF features for {len(train_texts)} training resumes...")
             X_train = self._build_feature_matrix(
                 [train_texts[i] for i in train_idx],
                 [train_raw[i] for i in train_idx],
@@ -218,6 +224,7 @@ class ResumeClassifier:
         self.model.fit(X_train, y_train)
         y_pred = self.model.predict(X_test)
 
+        all_label_ids = list(range(len(self.label_encoder.classes_)))
         metrics = {
             'accuracy': accuracy_score(y_test, y_pred),
             'f1_macro': f1_score(y_test, y_pred, average='macro'),
@@ -225,9 +232,11 @@ class ResumeClassifier:
             'classification_report': classification_report(
                 y_test,
                 y_pred,
+                labels=all_label_ids,
                 target_names=self.label_encoder.classes_,
+                zero_division=0,
             ),
-            'confusion_matrix': confusion_matrix(y_test, y_pred),
+            'confusion_matrix': confusion_matrix(y_test, y_pred, labels=all_label_ids),
             'train_size': X_train.shape[0],
             'test_size': X_test.shape[0],
             'n_features': X_train.shape[1],
@@ -245,7 +254,10 @@ class ResumeClassifier:
             holdout_labels = self.encode_labels(
                 holdout_df[label_column].tolist(), fit=False
             )
-            print(f"Encoding {len(holdout_texts)} holdout resumes with MiniLM...")
+            if self.feature_backend == 'minilm':
+                print(f"Encoding {len(holdout_texts)} holdout resumes with MiniLM...")
+            else:
+                print(f"Transforming {len(holdout_texts)} holdout resumes with TF-IDF...")
             X_holdout = self._build_feature_matrix(
                 holdout_texts, holdout_raw, fit=False, show_progress=True
             )

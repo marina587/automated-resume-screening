@@ -7,12 +7,8 @@ import numpy as np
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 
-try:
-    from .text_preprocessing import TextPreprocessor, extract_skills_from_text
-    from .embedding_models import RANKING_MODEL_ID, embed_texts, cosine_similarity_matrix
-except ImportError:
-    from text_preprocessing import TextPreprocessor, extract_skills_from_text
-    from embedding_models import RANKING_MODEL_ID, embed_texts, cosine_similarity_matrix
+from .text_preprocessing import TextPreprocessor, extract_skills_from_text
+from .embedding_models import RANKING_MODEL_ID, embed_texts, cosine_similarity_matrix
 
 
 class ResumeRanker:

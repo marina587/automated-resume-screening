@@ -124,6 +124,10 @@ class ModelLoader:
     def preprocessor(self):
         return self.bundle.preprocessor if self.bundle else None
 
+    @property
+    def label_encoder(self):
+        return self.bundle.label_encoder if self.bundle else None
+
     def load_models(self, model_dir: str = None):
         bundle = _load_cached_models(model_dir)
         if bundle is None:

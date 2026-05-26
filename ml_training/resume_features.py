@@ -10,10 +10,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
-try:
-    from .text_preprocessing import extract_skills_from_text, normalize_skill_aliases
-except ImportError:
-    from text_preprocessing import extract_skills_from_text, normalize_skill_aliases
+from .text_preprocessing import extract_skills_from_text, normalize_skill_aliases
 
 
 EDUCATION_LEVELS = {

@@ -38,23 +38,15 @@ def run_training_pipeline(
     logger.info("Starting Resume Screening Training Pipeline")
     logger.info("=" * 60)
 
-    try:
-        from ml_training.data_preparation import DataPreparator, create_sample_dataset
-        from ml_training.text_preprocessing import TextPreprocessor
-        from ml_training.model_training import ResumeClassifier
-    except ImportError:
-        from data_preparation import DataPreparator, create_sample_dataset
-        from text_preprocessing import TextPreprocessor
-        from model_training import ResumeClassifier
+    from ml_training.data_preparation import DataPreparator, create_sample_dataset
+    from ml_training.text_preprocessing import TextPreprocessor
+    from ml_training.model_training import ResumeClassifier
 
     logger.info("\n📊 STEP 1: Data Preparation")
     logger.info("-" * 40)
 
     if use_hf_dataset:
-        try:
-            from ml_training.load_hf_dataset import download_and_prepare
-        except ImportError:
-            from load_hf_dataset import download_and_prepare
+        from ml_training.load_hf_dataset import download_and_prepare
         logger.info("Downloading Hugging Face Resume-Screening-Dataset...")
         data_path = download_and_prepare(max_rows=hf_max_rows)
     elif create_sample or data_path is None:
@@ -178,14 +170,9 @@ def run_training_pipeline(
 
 
 def compare_all_models(data_path: str = None, sample_size: int = 500):
-    try:
-        from ml_training.data_preparation import create_sample_dataset, DataPreparator
-        from ml_training.text_preprocessing import TextPreprocessor
-        from ml_training.model_training import compare_models
-    except ImportError:
-        from data_preparation import create_sample_dataset, DataPreparator
-        from text_preprocessing import TextPreprocessor
-        from model_training import compare_models
+    from ml_training.data_preparation import create_sample_dataset, DataPreparator
+    from ml_training.text_preprocessing import TextPreprocessor
+    from ml_training.model_training import compare_models
 
     if data_path is None:
         data_path = create_sample_dataset(n_samples=sample_size)

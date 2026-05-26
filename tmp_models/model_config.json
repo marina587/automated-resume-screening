@@ -1,0 +1,13 @@
+{
+  "parsing": {
+    "pdf": "pymupdf",
+    "nlp": "en_core_web_sm"
+  },
+  "categorization": {
+    "backend": "tfidf",
+    "model": "sentence-transformers/all-MiniLM-L6-v2"
+  },
+  "ranking": {
+    "model": "sentence-transformers/all-MiniLM-L6-v2"
+  }
+}
