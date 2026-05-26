@@ -1,43 +1,25 @@
 ```
-# Data files
-data/*.csv
-
-# Model files
-models/*.pkl
-
-# Dependencies
-__pycache__/
+# Compiled and build artifacts
+*.pkl
 *.pyc
-*.pyo
-*.pyd
-.Python
-venv/
-env/
-ENV/
+__pycache__/
+*.o
+*.obj
+dist/
+build/
+# Dependencies
 .venv/
+venv/
+node_modules/
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+# Environment
 .env
 .env.local
 .env.*
-!requirements.txt
-!Pipfile
-!pyproject.toml
-
-# Logs
-*.log
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Editor specific
+# Editors
 .vscode/
 .idea/
-*.swp
-*.swo
-*~
 ```
