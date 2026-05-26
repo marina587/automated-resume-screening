@@ -230,9 +230,10 @@ def main():
         
         # Model status
         st.subheader("Model Status")
-        if load_models_for_instance(model_loader):
+        models_loaded = load_models_for_instance(model_loader)
+        if models_loaded:
             st.success("✅ Models loaded successfully")
-            if model_loader.label_encoder is not None:
+            if hasattr(model_loader, 'label_encoder') and model_loader.label_encoder is not None:
                 categories = list(model_loader.label_encoder.classes_)
                 st.info(f"Available categories: {len(categories)}")
         else:
