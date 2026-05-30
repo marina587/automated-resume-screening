@@ -155,10 +155,11 @@ def process_uploaded_files(uploaded_files) -> List[Dict]:
     
     for uploaded_file in uploaded_files:
         try:
-            # Save temporarily
-            temp_path = f"/tmp/{uploaded_file.name}"
-            with open(temp_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
+            # Save to a temporary file (cross-platform, avoids /tmp/ on Windows)
+            suffix = Path(uploaded_file.name).suffix or ".pdf"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(uploaded_file.getbuffer())
+                temp_path = tmp.name
             
             # Extract text
             text = parser.extract_text(temp_path)

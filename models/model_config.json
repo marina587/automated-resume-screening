@@ -9,5 +9,8 @@
   },
   "ranking": {
     "model": "sentence-transformers/all-MiniLM-L6-v2"
+  },
+  "preprocessing": {
+    "use_spacy": true
   }
 }

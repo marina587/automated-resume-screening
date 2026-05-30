@@ -7,7 +7,7 @@ Combines TF-IDF text features with resume-specific structured features.
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from typing import Tuple, Dict, Any, Optional, List
+from typing import Tuple, Dict, Any, Optional, List, Union
 import joblib
 from scipy.sparse import hstack, csr_matrix
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -23,6 +23,8 @@ from sklearn.metrics import (
     confusion_matrix,
     f1_score,
 )
+from sklearn.calibration import calibration_curve
+from sklearn.calibration import CalibratedClassifierCV
 
 from .resume_features import ResumeFeatureExtractor
 from .embedding_models import (
@@ -43,12 +45,14 @@ class ResumeClassifier:
         use_structured_features: bool = True,
         feature_backend: str = 'minilm',
         categorization_model_id: str = CATEGORIZATION_MODEL_ID,
+        use_spacy: bool = False,
     ):
         self.max_features = max_features
         self.model_type = model_type
         self.use_structured_features = use_structured_features
         self.feature_backend = feature_backend  # 'minilm' | 'tfidf'
         self.categorization_model_id = categorization_model_id
+        self.use_spacy = use_spacy
         self.vectorizer = TfidfVectorizer(
             max_features=max_features,
             stop_words='english',
@@ -101,7 +105,7 @@ class ResumeClassifier:
         raw_texts: List[str],
         fit: bool = False,
         show_progress: bool = False,
-    ):
+    ) -> Union[np.ndarray, csr_matrix]:
         if self.feature_backend == 'minilm':
             # Truncate long resumes for faster embedding (MiniLM max ~512 tokens)
             truncated = [t[:3000] if t else "" for t in texts]
@@ -120,14 +124,15 @@ class ResumeClassifier:
 
         if fit:
             X_text = self.vectorizer.fit_transform(texts)
-            if self.use_structured_features:
-                X_struct = self.feature_extractor.fit_transform(raw_texts)
         else:
             X_text = self.vectorizer.transform(texts)
-            if self.use_structured_features:
-                X_struct = self.feature_extractor.transform(raw_texts)
 
         if self.use_structured_features:
+            # Fit structured features on the same data as vectorizer (train split only)
+            if fit:
+                X_struct = self.feature_extractor.fit_transform(raw_texts)
+            else:
+                X_struct = self.feature_extractor.transform(raw_texts)
             return hstack([X_text, csr_matrix(X_struct)])
         return X_text
 
@@ -200,42 +205,52 @@ class ResumeClassifier:
                 stratify=None,
             )
 
-        if self.feature_backend == 'minilm':
-            print(f"Encoding {len(train_texts)} training resumes with MiniLM (one pass)...")
-            X_all = self._build_feature_matrix(
-                train_texts, train_raw, fit=True, show_progress=True
-            )
-            X_train = X_all[train_idx]
-            X_test = X_all[test_idx]
-        else:
-            print(f"Extracting TF-IDF features for {len(train_texts)} training resumes...")
-            X_train = self._build_feature_matrix(
-                [train_texts[i] for i in train_idx],
-                [train_raw[i] for i in train_idx],
-                fit=True,
-            )
-            X_test = self._build_feature_matrix(
-                [train_texts[i] for i in test_idx],
-                [train_raw[i] for i in test_idx],
-                fit=False,
-            )
+        # Single-pass feature extraction: fit on train split, transform test split
+        print(f"Extracting features for {len(train_texts)} training resumes "
+              f"(backend={self.feature_backend})...")
+        X_train = self._build_feature_matrix(
+            [train_texts[i] for i in train_idx],
+            [train_raw[i] for i in train_idx],
+            fit=True,
+            show_progress=(self.feature_backend == 'minilm'),
+        )
+        X_test = self._build_feature_matrix(
+            [train_texts[i] for i in test_idx],
+            [train_raw[i] for i in test_idx],
+            fit=False,
+        )
         y_train, y_test = y[train_idx], y[test_idx]
 
+        # Create and fit model (single fit — no redundant pre-fit)
         self.model = self._create_model()
-        self.model.fit(X_train, y_train)
         
         # Optionally calibrate to improve confidence accuracy
+        # Using 'isotonic' (non-parametric) instead of 'sigmoid' (parametric Platt scaling)
+        # because isotonic preserves relative ordering and produces higher peak confidences
+        # without over-squashing probabilities toward 0.5.
         if calibrate and len(y_train) >= 30:  # Need sufficient data for calibration
-            from sklearn.calibration import CalibratedClassifierCV
             self.model = CalibratedClassifierCV(
-                self.model, 
-                method='sigmoid',  # Works with any classifier
-                cv=5
+                self.model,
+                method='isotonic',
+                cv=5,
             )
             self.model.fit(X_train, y_train)
-            print("✓ Model calibrated with CalibratedClassifierCV (sigmoid method)")
+            print("[OK] Model calibrated with CalibratedClassifierCV (isotonic method)")
+        else:
+            self.model.fit(X_train, y_train)
         
         y_pred = self.model.predict(X_test)
+
+        # Compute Expected Calibration Error (ECE) to monitor confidence quality
+        try:
+            y_pred_proba = self.model.predict_proba(X_test)
+            y_proba_max = np.max(y_pred_proba, axis=1)
+            prob_true, prob_pred = calibration_curve(
+                y_test == y_pred, y_proba_max, n_bins=10, strategy='uniform'
+            )
+            ece = float(np.mean(np.abs(prob_true - prob_pred)))
+        except Exception:
+            ece = None
 
         all_label_ids = list(range(len(self.label_encoder.classes_)))
         metrics = {
@@ -255,6 +270,7 @@ class ResumeClassifier:
             'n_features': X_train.shape[1],
             'classes': list(self.label_encoder.classes_),
             'holdout_metrics': None,
+            'expected_calibration_error': ece,
         }
 
         if not holdout_df.empty and len(holdout_df) > 0:
@@ -289,6 +305,9 @@ class ResumeClassifier:
         print(f"Accuracy (stratified test): {metrics['accuracy']:.4f}")
         print(f"F1 Score (macro): {metrics['f1_macro']:.4f}")
         print(f"Number of features: {metrics['n_features']}")
+        if metrics['expected_calibration_error'] is not None:
+            print(f"Expected Calibration Error (ECE): {metrics['expected_calibration_error']:.4f} "
+                  "(lower is better; 0 = perfect calibration)")
         if metrics['holdout_metrics']:
             hm = metrics['holdout_metrics']
             print(
@@ -299,10 +318,6 @@ class ResumeClassifier:
 
         return metrics
 
-    def _transform_input(self, text: str, raw_text: Optional[str] = None) -> csr_matrix:
-        raw = raw_text if raw_text is not None else text
-        return self._build_feature_matrix([text], [raw], fit=False)
-
     def predict(
         self,
         texts: list,
@@ -312,17 +327,13 @@ class ResumeClassifier:
             raise ValueError("Model not trained. Call train() first.")
 
         raw_texts = raw_texts or texts
-        predictions = []
-        probabilities = []
-        for text, raw in zip(texts, raw_texts):
-            X = self._transform_input(text, raw)
-            pred = self.model.predict(X)[0]
-            prob = self.model.predict_proba(X)[0]
-            predictions.append(pred)
-            probabilities.append(prob)
+        # Batch-process all texts at once for efficiency
+        X = self._build_feature_matrix(texts, raw_texts, fit=False)
+        predictions = self.model.predict(X)
+        probabilities = self.model.predict_proba(X)
 
         predicted_labels = self.label_encoder.inverse_transform(predictions)
-        return predicted_labels, probabilities
+        return list(predicted_labels), list(probabilities)
 
     def predict_category(
         self,
@@ -354,6 +365,7 @@ class ResumeClassifier:
             model_dir,
             categorization_backend=self.feature_backend,
             categorization_model=self.categorization_model_id,
+            use_spacy=self.use_spacy,
         )
 
         print(f"Model saved to {model_path}")

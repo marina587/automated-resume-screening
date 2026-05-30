@@ -4,6 +4,7 @@ Complements TF-IDF with years of experience, education, skill metrics, and recen
 """
 
 import re
+from datetime import datetime
 from typing import Dict, List, Optional, Set
 
 import numpy as np
@@ -11,6 +12,8 @@ import pandas as pd
 from sklearn.preprocessing import StandardScaler
 
 from .text_preprocessing import extract_skills_from_text, normalize_skill_aliases
+
+_CURRENT_YEAR = datetime.now().year
 
 
 EDUCATION_LEVELS = {
@@ -66,7 +69,7 @@ def extract_years_of_experience(text: str) -> float:
     ):
         years.append(float(match.group(1)))
 
-    current_year = 2026
+    current_year = _CURRENT_YEAR
     for match in re.finditer(
         r'\b((?:19|20)\d{2})\s*[-–—to]+\s*((?:19|20)\d{2}|present|current|now)\b',
         text_lower,
@@ -105,7 +108,7 @@ def compute_skill_metrics(text: str, word_count: Optional[int] = None) -> Dict[s
     return {'skill_count': float(count), 'skill_density': float(density)}
 
 
-def compute_recency_score(text: str, current_year: int = 2026) -> float:
+def compute_recency_score(text: str, current_year: Optional[int] = None) -> float:
     """
     Weight recent experience higher based on latest year mentioned in the document.
     Returns 0-1 score (1 = mentions current/recent year).
@@ -113,6 +116,7 @@ def compute_recency_score(text: str, current_year: int = 2026) -> float:
     if not text:
         return 0.0
 
+    current_year = current_year or _CURRENT_YEAR
     years = [int(y) for y in re.findall(r'\b(20\d{2}|19\d{2})\b', text)]
     if not years:
         return 0.0

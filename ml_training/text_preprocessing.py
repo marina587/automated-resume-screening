@@ -34,7 +34,10 @@ except LookupError:
     nltk.download('punkt', quiet=True)
 
 
-# Canonical tokens for technologies stripped by naive punctuation removal
+# Canonical tokens for technologies stripped by naive punctuation removal.
+# NOTE: Abbreviations like 'ml', 'ai', 'k8s' are expanded in
+# normalize_skill_aliases() (called first in clean_text) and should NOT
+# appear here to avoid conflicting normalization paths.
 TECH_TERM_REPLACEMENTS: List[Tuple[str, str]] = [
     (r'\bc\+\+\b', ' cpp '),
     (r'\bc#\b', ' csharp '),
@@ -48,9 +51,6 @@ TECH_TERM_REPLACEMENTS: List[Tuple[str, str]] = [
     (r'\bscikit-learn\b', ' scikitlearn '),
     (r'\bci/cd\b', ' cicd '),
     (r'\bui/ux\b', ' uiux '),
-    (r'\bk8s\b', ' kubernetes '),
-    (r'\bml\b', ' machinelearning '),
-    (r'\bai\b', ' artificialintelligence '),
 ]
 
 # Version patterns: Python 3.11, TensorFlow 2.x -> python311, tensorflow2
@@ -327,11 +327,20 @@ class TextPreprocessor:
     def preprocess(self, text: str, return_tokens: bool = False) -> str:
         """
         Full preprocessing pipeline with optional section weighting.
+
+        When section-aware mode is enabled but no clear sections are detected
+        (everything falls into 'other'), the text is used as-is without dilution
+        to avoid reducing signal for short or non-standard resume inputs.
         """
         raw_for_sections = text
         if self.section_aware:
             sections = parse_resume_sections(raw_for_sections)
-            text = build_section_weighted_text(raw_for_sections, sections)
+            # Only apply section weighting if we detected meaningful sections.
+            # If everything is 'other', skip weighting to avoid diluting signal.
+            if len(sections) == 1 and 'other' in sections:
+                text = raw_for_sections
+            else:
+                text = build_section_weighted_text(raw_for_sections, sections)
 
         cleaned = self.clean_text(text)
 

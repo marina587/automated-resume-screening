@@ -60,6 +60,7 @@ def save_model_config(
     categorization_backend: str = "minilm",
     categorization_model: str = CATEGORIZATION_MODEL_ID,
     ranking_model: str = RANKING_MODEL_ID,
+    use_spacy: bool = False,
 ) -> Path:
     config = {
         "parsing": {"pdf": "pymupdf", "nlp": SPACY_MODEL_ID},
@@ -68,6 +69,7 @@ def save_model_config(
             "model": categorization_model,
         },
         "ranking": {"model": ranking_model},
+        "preprocessing": {"use_spacy": use_spacy},
     }
     path = Path(model_dir) / "model_config.json"
     path.parent.mkdir(parents=True, exist_ok=True)

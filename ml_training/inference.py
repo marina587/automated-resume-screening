@@ -38,8 +38,12 @@ class ModelBundle:
         self.feature_extractor = None
         self.use_structured_features = False
 
+        # Read preprocessing config to match training-time preprocessing
+        preprocessing_config = self.config.get("preprocessing", {})
+        use_spacy = preprocessing_config.get("use_spacy", False)
+
         self.preprocessor = TextPreprocessor(
-            use_spacy=True,
+            use_spacy=use_spacy,
             preserve_technical_terms=True,
             section_aware=True,
         )
@@ -87,7 +91,17 @@ class ModelBundle:
             return hstack([X_text, X_struct])
         return X_text
 
-    def predict_category(self, text: str) -> Dict[str, Any]:
+    def predict_category(self, text: str, temperature: float = 0.85) -> Dict[str, Any]:
+        """
+        Predict category with optional temperature scaling to sharpen probabilities.
+
+        Args:
+            text: Raw resume text to classify.
+            temperature: Temperature scaling factor (default 0.85).
+                         T < 1 sharpens probabilities (higher peak confidence).
+                         T = 1 is standard softmax.
+                         T > 1 flattens probabilities.
+        """
         if not self.is_loaded:
             raise ValueError("Models not loaded")
 
@@ -97,8 +111,18 @@ class ModelBundle:
 
         confidence = 0.0
         try:
-            probabilities = self.classifier.predict_proba(X)[0]
-            confidence = float(np.max(probabilities))
+            # Try temperature-scaled softmax first for sharper probabilities
+            if hasattr(self.classifier, "predict_log_proba"):
+                log_probs = self.classifier.predict_log_proba(X)[0]
+                # Apply temperature scaling: divide logits by T
+                scaled_log_probs = log_probs / temperature
+                # Convert back to probabilities via softmax
+                probs = np.exp(scaled_log_probs - np.max(scaled_log_probs))
+                probs = probs / np.sum(probs)
+                confidence = float(np.max(probs))
+            else:
+                probabilities = self.classifier.predict_proba(X)[0]
+                confidence = float(np.max(probabilities))
         except Exception as e:
             self.logger.warning(
                 "predict_proba failed for %s: %s",

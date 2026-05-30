@@ -4,6 +4,7 @@ Semantic similarity via sentence-transformers/all-MiniLM-L6-v2 (~90MB).
 """
 
 import numpy as np
+import pandas as pd
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 
@@ -145,8 +146,6 @@ class ApprovalWorkflow:
         output_path: str = "data/shortlist_report.csv",
         top_n: int = 10,
     ) -> str:
-        import pandas as pd
-
         top_candidates = ranked_resumes[:top_n]
         report_data = []
         for candidate in top_candidates:

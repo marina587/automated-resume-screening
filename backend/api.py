@@ -222,8 +222,9 @@ async def screen_resumes(
 
         for resume in ranked:
             try:
-                raw = resume.get("text", resume.get("cleaned_text", ""))
-                prediction = model_manager.predict_category(raw)
+                # Prefer cleaned_text to avoid double preprocessing
+                text_for_prediction = resume.get("cleaned_text", resume.get("text", ""))
+                prediction = model_manager.predict_category(text_for_prediction)
                 resume["predicted_category"] = prediction["category"]
                 resume["category_confidence"] = prediction["confidence"]
             except Exception:

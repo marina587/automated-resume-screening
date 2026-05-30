@@ -3,10 +3,6 @@ Training Pipeline Script
 End-to-end training pipeline for the resume screening system.
 """
 
-# %% GPU check for Colab
-import torch
-print(torch.cuda.is_available())
-
 import argparse
 from pathlib import Path
 import logging
@@ -113,6 +109,7 @@ def run_training_pipeline(
         model_type=model_type,
         use_structured_features=True,
         feature_backend=feature_backend,
+        use_spacy=use_spacy_preprocess,
     )
     metrics = classifier.train(
         df,
@@ -189,6 +186,16 @@ def compare_all_models(data_path: str = None, sample_size: int = 500):
 
 
 def main():
+    # GPU check (moved inside main to avoid side effects on import)
+    try:
+        import torch
+        if torch.cuda.is_available():
+            logger.info("GPU available: %s", torch.cuda.get_device_name(0))
+        else:
+            logger.info("GPU not available — using CPU")
+    except ImportError:
+        logger.info("PyTorch not found — using CPU")
+
     parser = argparse.ArgumentParser(description='Train Resume Screening Models')
     parser.add_argument('--data', '-d', type=str, default=None)
     parser.add_argument('--output', '-o', type=str, default='models')

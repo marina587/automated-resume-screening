@@ -50,16 +50,23 @@ ROLE_ACRONYM_FIXES = {
     "Ml": "ML",
     "Hr": "HR",
     "Qa": "QA",
-    "Ar/Vr": "AR/VR",
     "Devops": "DevOps",
-    "E-Commerce": "E-commerce",
 }
 
 
 def normalize_role_name(role: str) -> str:
+    """Normalize role name with proper casing and acronym handling."""
     role = re.sub(r"\s+", " ", role.strip())
-    words = role.title().split()
-    return " ".join(ROLE_ACRONYM_FIXES.get(w, w) for w in words)
+    # Split on whitespace and hyphens, title-case each part, then rejoin
+    parts = re.split(r"(\s+|-)", role)
+    normalized_parts = []
+    for part in parts:
+        if part in (" ", "-"):
+            normalized_parts.append(part)
+        else:
+            titled = part.title()
+            normalized_parts.append(ROLE_ACRONYM_FIXES.get(titled, titled))
+    return "".join(normalized_parts)
 
 
 def clean_resume_text(text: str) -> str:
