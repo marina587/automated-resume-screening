@@ -60,10 +60,14 @@ class ModelManager:
             logger.error("Error loading models: %s", e)
             return False
 
-    def predict_category(self, text: str) -> Dict[str, Any]:
+    def predict_category(
+        self, text: str, confidence_threshold: float = 0.3
+    ) -> Dict[str, Any]:
         if not self.is_loaded:
             raise ValueError("Models not loaded")
-        return self.bundle.predict_category(text)
+        return self.bundle.predict_category(
+            text, confidence_threshold=confidence_threshold
+        )
 
     def rank_resumes(
         self,
@@ -86,6 +90,13 @@ class ResumeScreeningRequest(BaseModel):
     shortlist_threshold: float = 0.6
     review_threshold: float = 0.4
     top_n: int = 10
+
+    def validate_thresholds(self):
+        if self.shortlist_threshold < self.review_threshold:
+            raise ValueError(
+                f"shortlist_threshold ({self.shortlist_threshold}) must be >= "
+                f"review_threshold ({self.review_threshold})"
+            )
 
 
 class ScreeningResult(BaseModel):
@@ -187,6 +198,16 @@ async def screen_resumes(
             raise HTTPException(
                 status_code=503,
                 detail="Models not loaded. Train models first.",
+            )
+
+        # Validate thresholds before processing
+        if shortlist_threshold < review_threshold:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"shortlist_threshold ({shortlist_threshold}) must be >= "
+                    f"review_threshold ({review_threshold})"
+                ),
             )
 
         parser = ResumeParser(use_spacy=True)

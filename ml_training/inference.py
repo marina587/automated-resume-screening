@@ -91,9 +91,18 @@ class ModelBundle:
             return hstack([X_text, X_struct])
         return X_text
 
-    def predict_category(self, text: str, temperature: float = 0.85) -> Dict[str, Any]:
+    def predict_category(
+        self,
+        text: str,
+        temperature: float = 0.85,
+        confidence_threshold: float = 0.3,
+    ) -> Dict[str, Any]:
         """
         Predict category with optional temperature scaling to sharpen probabilities.
+
+        If the maximum predicted probability is below `confidence_threshold`,
+        the category is set to "Unknown" to avoid forcing an unrelated resume
+        into one of the known categories.
 
         Args:
             text: Raw resume text to classify.
@@ -101,9 +110,21 @@ class ModelBundle:
                          T < 1 sharpens probabilities (higher peak confidence).
                          T = 1 is standard softmax.
                          T > 1 flattens probabilities.
+            confidence_threshold: Minimum confidence to accept a prediction.
+                                  Below this threshold, returns "Unknown"
+                                  (default 0.3).
+
+        Raises:
+            ValueError: If temperature <= 0 (would cause division by zero or NaN).
         """
         if not self.is_loaded:
             raise ValueError("Models not loaded")
+
+        if temperature <= 0:
+            raise ValueError(
+                f"Temperature must be > 0 (got {temperature}). "
+                "Values <= 0 cause division by zero and NaN scores."
+            )
 
         cleaned_text = self.preprocessor.preprocess(text)
         X = self._build_features(cleaned_text, text)
@@ -145,7 +166,11 @@ class ModelBundle:
                     exc,
                 )
 
-        category = self.label_encoder.inverse_transform([prediction])[0]
+        # Apply confidence threshold — return "Unknown" if confidence is too low
+        if confidence < confidence_threshold:
+            category = "Unknown"
+        else:
+            category = self.label_encoder.inverse_transform([prediction])[0]
 
         return {
             "category": category,

@@ -81,12 +81,8 @@ class ResumeParser:
         if not os.path.exists(pdf_path):
             raise FileNotFoundError(f"File not found: {pdf_path}")
 
-        try:
-            text = self._extract_with_pymupdf(pdf_path)
-            return self.refine_with_spacy(text.strip())
-        except Exception as e:
-            print(f"Error extracting text from {pdf_path}: {e}")
-            return ""
+        text = self._extract_with_pymupdf(pdf_path)
+        return self.refine_with_spacy(text.strip())
 
     def extract_text_from_docx(self, docx_path: str) -> str:
         if not self.docx_available:
@@ -95,12 +91,8 @@ class ResumeParser:
         if not os.path.exists(docx_path):
             raise FileNotFoundError(f"File not found: {docx_path}")
 
-        try:
-            text = self._extract_with_docx(docx_path)
-            return self.refine_with_spacy(text.strip())
-        except Exception as e:
-            print(f"Error extracting text from {docx_path}: {e}")
-            return ""
+        text = self._extract_with_docx(docx_path)
+        return self.refine_with_spacy(text.strip())
 
     def extract_text(self, file_path: str) -> str:
         file_ext = Path(file_path).suffix.lower()
@@ -150,6 +142,7 @@ class ResumeParser:
         results = []
 
         for uploaded_file in uploaded_files:
+            temp_path = None
             try:
                 file_ext = Path(uploaded_file.name).suffix.lower()
                 suffix = file_ext or ".pdf"
@@ -169,10 +162,14 @@ class ResumeParser:
                         "file_type": file_ext[1:].upper() if file_ext else "UNKNOWN",
                     })
 
-                os.remove(temp_path)
-
             except Exception as e:
                 print(f"Error processing {uploaded_file.name}: {e}")
+            finally:
+                if temp_path is not None and os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except Exception as e:
+                        print(f"Warning: could not remove temp file {temp_path}: {e}")
 
         return pd.DataFrame(results)
 

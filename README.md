@@ -17,35 +17,56 @@ A comprehensive machine learning system for automated resume screening, categori
 ## 🏗️ Project Structure
 
 ```
-/workspace
-├── ml_training/           # Machine Learning modules
-│   ├── data_preparation.py    # Data loading and cleaning
-│   ├── text_preprocessing.py  # Text cleaning and NLP
-│   ├── resume_parser.py       # PDF/DOCX text extraction
-│   ├── model_training.py      # Model training and evaluation
-│   ├── resume_ranking.py      # Similarity scoring and ranking
-│   └── train_pipeline.py      # End-to-end training script
+.
+├── ml_training/                # Machine Learning modules
+│   ├── __init__.py                 # Package init
+│   ├── data_preparation.py         # Data loading and cleaning
+│   ├── text_preprocessing.py       # Text cleaning and NLP
+│   ├── resume_parser.py            # PDF/DOCX text extraction
+│   ├── resume_features.py          # Structured resume feature extraction
+│   ├── embedding_models.py         # Shared sentence-transformer models
+│   ├── model_training.py           # Model training and evaluation
+│   ├── resume_ranking.py           # Similarity scoring and ranking
+│   ├── inference.py                # Unified model loading (ModelBundle)
+│   ├── train_pipeline.py           # End-to-end training script
+│   ├── load_hf_dataset.py          # Hugging Face dataset download
+│   ├── adapt_kaggle_dataset.py     # Kaggle dataset adaptation
+│   ├── inspect_dataset.py          # Dataset inspection utility
+│   ├── data/                       # Training data artifacts
+│   └── models/                     # Training model artifacts
 │
-├── backend/               # REST API
-│   └── api.py             # FastAPI application
+├── backend/                # REST API
+│   └── api.py              # FastAPI application
 │
-├── frontend/              # Web UI
-│   └── app.py             # Streamlit application
+├── frontend/               # Web UI
+│   └── app.py              # Streamlit application
 │
-├── docker/                # Docker configuration
+├── docker/                 # Docker configuration
 │   ├── Dockerfile
-│   └── docker-compose.yml
+│   ├── docker-compose.yml
+│   └── README.md           # Docker-specific documentation
 │
-├── data/                  # Data directory
-│   └── resumes_cleaned.csv
+├── scripts/                # Utility scripts
+│   └── list_categories.py  # List categories from cleaned CSV
 │
-├── models/                # Trained models
+├── data/                   # Data directory
+│   ├── resumes_cleaned.csv
+│   ├── sample_resumes.csv
+│   └── resume_dataset_200k_enhanced.csv
+│
+├── models/                 # Trained models
 │   ├── logistic_model.pkl
+│   ├── random_forest_model.pkl
+│   ├── svm_model.pkl
+│   ├── knn_model.pkl
+│   ├── vectorizer.pkl
 │   ├── label_encoder.pkl
-│   ├── model_config.json  # minilm | tfidf + ranking model id
-│   └── feature_extractor.pkl (optional structured features)
+│   ├── feature_extractor.pkl
+│   └── model_config.json   # minilm | tfidf + ranking model id
 │
-└── requirements.txt       # Python dependencies
+├── logs/                   # Application logs
+├── resume_features.py      # Compatibility alias for older models
+└── requirements.txt        # Python dependencies
 ```
 
 ## 🚀 Quick Start
@@ -206,7 +227,7 @@ Download from Kaggle: [Resume Screening Dataset](https://www.kaggle.com/datasets
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| max_features | 5000 | TF-IDF feature limit |
+| max_features | 8000 | TF-IDF feature limit |
 | model_type | logistic | Model algorithm |
 | shortlist_threshold | 0.6 | Score for shortlisting |
 | review_threshold | 0.4 | Score for further review |

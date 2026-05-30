@@ -47,7 +47,10 @@ class ResumeRanker:
         embeddings = embed_texts(all_texts, model_id=self.ranking_model_id)
         job_vec = embeddings[0:1]
         resume_vecs = embeddings[1:]
-        return cosine_similarity_matrix(job_vec, resume_vecs).flatten()
+        scores = cosine_similarity_matrix(job_vec, resume_vecs).flatten()
+        # Guard against NaN/Inf from degenerate inputs
+        scores = np.nan_to_num(scores, nan=0.0, posinf=1.0, neginf=0.0)
+        return scores
 
     def rank_resumes(
         self,
@@ -55,6 +58,8 @@ class ResumeRanker:
         resume_data: List[Dict],
         top_n: int = 10,
     ) -> List[Dict]:
+        if top_n < 1:
+            top_n = 1
         texts = [
             r.get("cleaned_text") or r.get("text", r.get("resume_text", ""))
             for r in resume_data
@@ -78,6 +83,8 @@ class ResumeRanker:
         similarity_weight: float = 0.5,
         top_n: int = 10,
     ) -> List[Dict]:
+        if top_n < 1:
+            top_n = 1
         job_skills = set(extract_skills_from_text(job_description))
         results = []
 

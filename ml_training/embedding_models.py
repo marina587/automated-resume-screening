@@ -37,9 +37,12 @@ def embed_texts(
     """Encode texts to normalized embedding vectors."""
     if not texts:
         return np.empty((0, 384), dtype=np.float32)
+    # Replace empty or whitespace-only strings with a placeholder to avoid
+    # degenerate embeddings (NaN/Inf) from the sentence transformer
+    safe_texts = [t if t and t.strip() else "[empty]" for t in texts]
     encoder = get_sentence_encoder(model_id)
     embeddings = encoder.encode(
-        texts,
+        safe_texts,
         batch_size=batch_size,
         show_progress_bar=show_progress,
         convert_to_numpy=True,

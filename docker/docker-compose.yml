@@ -1,7 +1,5 @@
 # Docker Compose for AI Resume Screening System
 
-version: '3.8'
-
 services:
   # API Backend Service
   api:

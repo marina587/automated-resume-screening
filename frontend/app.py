@@ -16,11 +16,12 @@ st.set_page_config(
     page_title="AI Resume Screening System",
     page_icon="📄",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 # Custom CSS for better styling
-st.markdown("""
+st.markdown(
+    """
 <style>
     .main-header {
         font-size: 2.5rem;
@@ -76,7 +77,9 @@ st.markdown("""
         font-weight: bold;
     }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 
 @st.cache_resource
@@ -136,65 +139,86 @@ class ModelLoader:
         self.is_loaded = True
         return True
 
-    def predict_category(self, text: str):
-        return self.bundle.predict_category(text)
+    def predict_category(self, text: str, confidence_threshold: float = 0.3):
+        return self.bundle.predict_category(
+            text, confidence_threshold=confidence_threshold
+        )
 
 
 def extract_skills(text: str) -> List[str]:
     """Extract skills from text."""
     from ml_training.text_preprocessing import extract_skills_from_text
+
     return extract_skills_from_text(text)
 
 
 def process_uploaded_files(uploaded_files) -> List[Dict]:
     """Process uploaded resume files and extract text."""
     from ml_training.resume_parser import ResumeParser
-    
+
     parser = ResumeParser()
     resumes = []
-    
+
     for uploaded_file in uploaded_files:
+        temp_path = None
         try:
             # Save to a temporary file (cross-platform, avoids /tmp/ on Windows)
             suffix = Path(uploaded_file.name).suffix or ".pdf"
             with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
                 tmp.write(uploaded_file.getbuffer())
                 temp_path = tmp.name
-            
+
             # Extract text
             text = parser.extract_text(temp_path)
-            
+
             if text:
-                resumes.append({
-                    'filename': uploaded_file.name,
-                    'text': text,
-                    'file_type': Path(uploaded_file.name).suffix[1:].upper()
-                })
-            
-            # Clean up
-            os.remove(temp_path)
-            
+                resumes.append(
+                    {
+                        "filename": uploaded_file.name,
+                        "text": text,
+                        "file_type": Path(uploaded_file.name).suffix[1:].upper(),
+                    }
+                )
+
         except Exception as e:
             st.error(f"Error processing {uploaded_file.name}: {e}")
-    
+        finally:
+            # Guarantee cleanup even if extraction fails
+            if temp_path is not None and os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except Exception as e:
+                    st.warning(f"Could not remove temp file {temp_path}: {e}")
+
     return resumes
 
 
-def make_decision(score: float, shortlist_threshold: float, review_threshold: float) -> str:
-    """Make approval decision based on score."""
+def make_decision(
+    score: float, shortlist_threshold: float, review_threshold: float
+) -> str:
+    """Make approval decision based on score.
+
+    Validates that shortlist_threshold >= review_threshold to prevent
+    inverted thresholds causing wrong approval decisions.
+    """
+    if shortlist_threshold < review_threshold:
+        raise ValueError(
+            f"shortlist_threshold ({shortlist_threshold}) must be >= "
+            f"review_threshold ({review_threshold})"
+        )
     if score >= shortlist_threshold:
-        return 'Shortlist'
+        return "Shortlist"
     elif score >= review_threshold:
-        return 'Further Review'
+        return "Further Review"
     else:
-        return 'Reject'
+        return "Reject"
 
 
 def render_decision(decision: str) -> str:
     """Render decision with appropriate styling."""
-    if decision == 'Shortlist':
+    if decision == "Shortlist":
         return f'<span class="decision-shortlist">✓ {decision}</span>'
-    elif decision == 'Further Review':
+    elif decision == "Further Review":
         return f'<span class="decision-review">⚠ {decision}</span>'
     else:
         return f'<span class="decision-reject">✗ {decision}</span>'
@@ -202,28 +226,34 @@ def render_decision(decision: str) -> str:
 
 def main():
     """Main application function."""
-    
+
     # Header
-    st.markdown('<h1 class="main-header">📄 AI-Powered Resume Screening & Approval System</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Automatically screen, rank, and approve resumes using machine learning</p>', unsafe_allow_html=True)
-    
+    st.markdown(
+        '<h1 class="main-header">📄 AI-Powered Resume Screening & Approval System</h1>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<p class="sub-header">Automatically screen, rank, and approve resumes using machine learning</p>',
+        unsafe_allow_html=True,
+    )
+
     # Initialize model loader
     model_loader = ModelLoader()
-    
+
     # Sidebar
     with st.sidebar:
         st.header("⚙️ Settings")
-        
+
         # Model status
         # Model Status Section
         st.subheader("Model Status")
         models_loaded = model_loader.load_models()
-        
+
         categories = []
         if models_loaded:
             if model_loader.label_encoder is not None:
                 try:
-                    if hasattr(model_loader.label_encoder, 'classes_'):
+                    if hasattr(model_loader.label_encoder, "classes_"):
                         categories = list(model_loader.label_encoder.classes_)
                         st.success("✅ Models loaded successfully")
                         st.info(f"Available categories: {len(categories)}")
@@ -237,10 +267,12 @@ def main():
                 st.info("Try restarting the application or retraining models.")
         else:
             st.error("❌ Models not loaded. Please train models first.")
-            st.info("Run training script to create models: `python ml_training/train_pipeline.py --sample --sample-size 1000`")
-        
+            st.info(
+                "Run training script to create models: `python ml_training/train_pipeline.py --sample --sample-size 1000`"
+            )
+
         st.divider()
-        
+
         # Threshold settings
         st.subheader("Approval Thresholds")
         shortlist_threshold = st.slider(
@@ -249,7 +281,7 @@ def main():
             max_value=0.9,
             value=0.6,
             step=0.05,
-            help="Resumes above this score will be shortlisted"
+            help="Resumes above this score will be shortlisted",
         )
         review_threshold = st.slider(
             "Further Review Threshold",
@@ -257,19 +289,19 @@ def main():
             max_value=0.7,
             value=0.4,
             step=0.05,
-            help="Resumes between this and shortlist threshold need further review"
+            help="Resumes between this and shortlist threshold need further review",
         )
-        
+
         st.divider()
-        
+
         # Ranking settings
         st.subheader("Ranking Settings")
         top_n = st.slider("Top N Candidates", 5, 50, 10)
         skill_weight = st.slider("Skill Match Weight", 0.0, 1.0, 0.5, 0.1)
         similarity_weight = 1.0 - skill_weight
-        
+
         st.divider()
-        
+
         # Info
         st.info("""
         ### How to Use:
@@ -279,46 +311,44 @@ def main():
         4. Review ranked results
         5. Download shortlist report
         """)
-    
+
     # Main content area
     col1, col2 = st.columns([2, 1])
-    
+
     with col1:
         st.subheader("📝 Job Description")
         job_description = st.text_area(
             "Enter the job description",
             height=200,
             placeholder="Paste the full job description here...",
-            help="The system will match resumes against this description"
+            help="The system will match resumes against this description",
         )
-        
+
         # Extract and display skills from job description
         if job_description:
             jd_skills = extract_skills(job_description)
             if jd_skills:
                 st.caption(f"🎯 Detected skills: {', '.join(jd_skills)}")
-    
+
     with col2:
         st.subheader("📎 Upload Resumes")
         uploaded_files = st.file_uploader(
             "Upload resume files",
-            type=['pdf', 'docx'],
+            type=["pdf", "docx"],
             accept_multiple_files=True,
-            help="Supported formats: PDF, DOCX"
+            help="Supported formats: PDF, DOCX",
         )
-        
+
         if uploaded_files:
             st.success(f"✅ {len(uploaded_files)} file(s) uploaded")
-    
+
     # Screen button
     col1, col2, col3 = st.columns([3, 1, 3])
     with col2:
         screen_button = st.button(
-            "🔍 Screen Resumes",
-            type="primary",
-            use_container_width=True
+            "🔍 Screen Resumes", type="primary", use_container_width=True
         )
-    
+
     # Results section
     if screen_button:
         if not job_description:
@@ -327,12 +357,18 @@ def main():
             st.warning("⚠️ Please upload at least one resume")
         elif not model_loader.is_loaded:
             st.error("❌ Models not loaded. Please train models first.")
+        elif shortlist_threshold < review_threshold:
+            st.error(
+                f"Shortlist threshold ({shortlist_threshold}) must be >= "
+                f"Review threshold ({review_threshold}). "
+                "Please adjust the sliders."
+            )
         else:
             with st.spinner("🔄 Processing resumes..."):
                 try:
                     # Process uploaded files
                     resumes = process_uploaded_files(uploaded_files)
-                    
+
                     if not resumes:
                         st.error("No valid resumes could be processed")
                     else:
@@ -342,114 +378,163 @@ def main():
                             resumes,
                             skill_weight=skill_weight,
                             similarity_weight=similarity_weight,
-                            top_n=top_n
+                            top_n=top_n,
                         )
-                        
+
                         # Apply approval decisions
                         for resume in ranked:
-                            resume['decision'] = make_decision(
-                                resume['combined_score'],
+                            resume["decision"] = make_decision(
+                                resume["combined_score"],
                                 shortlist_threshold,
-                                review_threshold
+                                review_threshold,
                             )
-                            
+
                             try:
-                                raw = resume.get('text', resume.get('cleaned_text', ''))
+                                raw = resume.get("text", resume.get("cleaned_text", ""))
                                 pred = model_loader.predict_category(raw)
-                                resume['predicted_category'] = pred['category']
-                                resume['category_confidence'] = pred['confidence']
-                                resume['prediction_error'] = None
+                                resume["predicted_category"] = pred["category"]
+                                resume["category_confidence"] = pred["confidence"]
+                                resume["prediction_error"] = None
                             except Exception as e:
-                                resume['predicted_category'] = 'Unknown'
-                                resume['category_confidence'] = 0.0
-                                resume['prediction_error'] = str(e)
-                        
+                                resume["predicted_category"] = "Unknown"
+                                resume["category_confidence"] = 0.0
+                                resume["prediction_error"] = str(e)
+
                         # Display summary
                         st.divider()
                         st.subheader("📊 Screening Results")
-                        
+
                         # Summary metrics
-                        shortlist_count = sum(1 for r in ranked if r['decision'] == 'Shortlist')
-                        review_count = sum(1 for r in ranked if r['decision'] == 'Further Review')
-                        reject_count = sum(1 for r in ranked if r['decision'] == 'Reject')
-                        
+                        shortlist_count = sum(
+                            1 for r in ranked if r["decision"] == "Shortlist"
+                        )
+                        review_count = sum(
+                            1 for r in ranked if r["decision"] == "Further Review"
+                        )
+                        reject_count = sum(
+                            1 for r in ranked if r["decision"] == "Reject"
+                        )
+
                         col1, col2, col3, col4 = st.columns(4)
                         col1.metric("Total Resumes", len(resumes))
-                        col2.metric("Shortlisted", shortlist_count, delta_color="normal")
+                        col2.metric(
+                            "Shortlisted", shortlist_count, delta_color="normal"
+                        )
                         col3.metric("Further Review", review_count)
                         col4.metric("Rejected", reject_count)
-                        
+
                         st.divider()
-                        
+
                         # Detailed results
                         st.subheader("🏆 Ranked Candidates")
-                        
+
                         for i, resume in enumerate(ranked, 1):
-                            score_color = "score-high" if resume['combined_score'] >= 0.6 else \
-                                         "score-medium" if resume['combined_score'] >= 0.4 else "score-low"
-                            
+                            score_color = (
+                                "score-high"
+                                if resume["combined_score"] >= 0.6
+                                else (
+                                    "score-medium"
+                                    if resume["combined_score"] >= 0.4
+                                    else "score-low"
+                                )
+                            )
+
                             with st.container():
                                 col1, col2 = st.columns([3, 1])
-                                
+
                                 with col1:
                                     st.markdown(f"**#{i} - {resume['filename']}**")
-                                    st.caption(f"File Type: {resume.get('file_type', 'Unknown')}")
-                                    
+                                    st.caption(
+                                        f"File Type: {resume.get('file_type', 'Unknown')}"
+                                    )
+
                                     # Skills
-                                    if resume.get('matched_skills'):
+                                    if resume.get("matched_skills"):
                                         st.markdown(f"""
                                         **Matched Skills:**  
                                         {', '.join(resume['matched_skills'])}
                                         """)
-                                    
-                                    if resume.get('missing_skills'):
+
+                                    if resume.get("missing_skills"):
                                         st.markdown(f"""
                                         **Missing Skills:**  
                                         {', '.join(resume['missing_skills'])}
                                         """)
-                                    
+
                                     # Category prediction
-                                    if resume.get('predicted_category'):
-                                        conf_pct = resume['category_confidence'] * 100
-                                        st.caption(f"Predicted Category: {resume['predicted_category']} ({conf_pct:.1f}% confidence)")
-                                    if resume.get('prediction_error'):
-                                        st.caption(f"Prediction error: {resume['prediction_error']}")
-                                
+                                    if resume.get("predicted_category"):
+                                        conf_pct = resume["category_confidence"] * 100
+                                        if resume["predicted_category"] == "Unknown":
+                                            st.caption(
+                                                f"Predicted Category: ❓ Unknown (confidence too low: {conf_pct:.1f}%)"
+                                            )
+                                        else:
+                                            st.caption(
+                                                f"Predicted Category: {resume['predicted_category']} ({conf_pct:.1f}% confidence)"
+                                            )
+                                    if resume.get("prediction_error"):
+                                        st.caption(
+                                            f"Prediction error: {resume['prediction_error']}"
+                                        )
+
                                 with col2:
-                                    st.markdown(f"""
+                                    st.markdown(
+                                        f"""
                                     <div style="text-align: right;">
                                         <p class="{score_color}">{resume['combined_score']:.2%}</p>
                                         {render_decision(resume['decision'])}
                                     </div>
-                                    """, unsafe_allow_html=True)
-                                    
+                                    """,
+                                        unsafe_allow_html=True,
+                                    )
+
                                     with st.expander("Details"):
-                                        st.write(f"Similarity: {resume['similarity_score']:.2%}")
-                                        st.write(f"Skill Match: {resume['skill_match_score']:.2%}")
-                                
+                                        st.write(
+                                            f"Similarity: {resume['similarity_score']:.2%}"
+                                        )
+                                        st.write(
+                                            f"Skill Match: {resume['skill_match_score']:.2%}"
+                                        )
+
                                 st.divider()
-                        
+
                         # Export functionality
                         st.subheader("💾 Export Results")
-                        
+
                         # Prepare DataFrame for export
                         export_data = []
                         for resume in ranked:
-                            export_data.append({
-                                'Rank': ranked.index(resume) + 1,
-                                'Filename': resume['filename'],
-                                'Decision': resume['decision'],
-                                'Combined Score': round(resume['combined_score'], 4),
-                                'Similarity Score': round(resume['similarity_score'], 4),
-                                'Skill Match': round(resume['skill_match_score'], 4),
-                                'Predicted Category': resume.get('predicted_category', 'Unknown'),
-                                'Category Confidence': round(resume.get('category_confidence', 0.0), 4),
-                                'Matched Skills': ', '.join(resume.get('matched_skills', [])),
-                                'Missing Skills': ', '.join(resume.get('missing_skills', []))
-                            })
-                        
+                            export_data.append(
+                                {
+                                    "Rank": ranked.index(resume) + 1,
+                                    "Filename": resume["filename"],
+                                    "Decision": resume["decision"],
+                                    "Combined Score": round(
+                                        resume["combined_score"], 4
+                                    ),
+                                    "Similarity Score": round(
+                                        resume["similarity_score"], 4
+                                    ),
+                                    "Skill Match": round(
+                                        resume["skill_match_score"], 4
+                                    ),
+                                    "Predicted Category": resume.get(
+                                        "predicted_category", "Unknown"
+                                    ),
+                                    "Category Confidence": round(
+                                        resume.get("category_confidence", 0.0), 4
+                                    ),
+                                    "Matched Skills": ", ".join(
+                                        resume.get("matched_skills", [])
+                                    ),
+                                    "Missing Skills": ", ".join(
+                                        resume.get("missing_skills", [])
+                                    ),
+                                }
+                            )
+
                         df_export = pd.DataFrame(export_data)
-                        
+
                         # CSV download
                         csv = df_export.to_csv(index=False)
                         st.download_button(
@@ -457,12 +542,12 @@ def main():
                             data=csv,
                             file_name=f"resume_screening_results_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
                             mime="text/csv",
-                            use_container_width=True
+                            use_container_width=True,
                         )
-                        
+
                 except Exception as e:
                     st.error(f"Error during screening: {e}")
-    
+
     # Footer
     st.divider()
     st.caption("AI Resume Screening System v1.0 | Powered by Machine Learning")
