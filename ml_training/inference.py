@@ -20,6 +20,8 @@ from .embedding_models import (
 from .resume_ranking import ResumeRanker
 from .text_preprocessing import TextPreprocessor
 
+UNKNOWN_CATEGORY = "Unknown"
+
 
 class ModelBundle:
     """Loaded categorization + ranking models."""
@@ -52,14 +54,37 @@ class ModelBundle:
         self.logger = logging.getLogger(__name__)
 
     def load(self) -> bool:
-        model_path = self.model_dir / "logistic_model.pkl"
         encoder_path = self.model_dir / "label_encoder.pkl"
+        if not encoder_path.exists():
+            return False
 
-        if not model_path.exists() or not encoder_path.exists():
+        model_type = self.config.get("categorization", {}).get("model_type")
+        if model_type:
+            model_path = self.model_dir / f"{model_type}_model.pkl"
+        else:
+            # Fallback for legacy artifacts: detect any saved classifier model.
+            model_path = None
+            for candidate in [
+                "logistic",
+                "random_forest",
+                "gradient_boosting",
+                "svm",
+                "knn",
+            ]:
+                candidate_path = self.model_dir / f"{candidate}_model.pkl"
+                if candidate_path.exists():
+                    model_path = candidate_path
+                    break
+            if model_path is None:
+                return False
+
+        if not model_path.exists():
             return False
 
         self.classifier = joblib.load(model_path)
         self.label_encoder = joblib.load(encoder_path)
+        self.loaded_model_path = str(model_path)
+        self.loaded_model_type = model_type or model_path.name.replace("_model.pkl", "")
 
         vectorizer_path = self.model_dir / "vectorizer.pkl"
         if vectorizer_path.exists() and self.categorization_backend == "tfidf":
@@ -75,7 +100,9 @@ class ModelBundle:
 
     def _build_features(self, cleaned_text: str, raw_text: str) -> np.ndarray:
         if self.categorization_backend == "minilm":
-            emb = embed_texts([cleaned_text], model_id=self.categorization_model_id)
+            # Truncate to MiniLM's 512-token limit (~3000 chars for English)
+            truncated = cleaned_text[:3000] if cleaned_text else ""
+            emb = embed_texts([truncated], model_id=self.categorization_model_id)
             parts = [emb]
             if self.use_structured_features and self.feature_extractor is not None:
                 struct = self.feature_extractor.transform([raw_text])
@@ -100,6 +127,11 @@ class ModelBundle:
         """
         Predict category with optional temperature scaling to sharpen probabilities.
 
+        Temperature scaling is only applied when the classifier is NOT calibrated
+        (i.e., not wrapped in CalibratedClassifierCV). Calibrated models already
+        produce well-calibrated probabilities, and applying temperature on top
+        would distort the calibration.
+
         If the maximum predicted probability is below `confidence_threshold`,
         the category is set to "Unknown" to avoid forcing an unrelated resume
         into one of the known categories.
@@ -110,6 +142,7 @@ class ModelBundle:
                          T < 1 sharpens probabilities (higher peak confidence).
                          T = 1 is standard softmax.
                          T > 1 flattens probabilities.
+                         Only applied when the model is NOT calibrated.
             confidence_threshold: Minimum confidence to accept a prediction.
                                   Below this threshold, returns "Unknown"
                                   (default 0.3).
@@ -132,18 +165,24 @@ class ModelBundle:
 
         confidence = 0.0
         try:
-            # Try temperature-scaled softmax first for sharper probabilities
-            if hasattr(self.classifier, "predict_log_proba"):
-                log_probs = self.classifier.predict_log_proba(X)[0]
-                # Apply temperature scaling: divide logits by T
-                scaled_log_probs = log_probs / temperature
-                # Convert back to probabilities via softmax
-                probs = np.exp(scaled_log_probs - np.max(scaled_log_probs))
-                probs = probs / np.sum(probs)
-                confidence = float(np.max(probs))
-            else:
-                probabilities = self.classifier.predict_proba(X)[0]
-                confidence = float(np.max(probabilities))
+            probabilities = self.classifier.predict_proba(X)[0]
+            confidence = float(np.max(probabilities))
+
+            # Apply temperature scaling ONLY if the model is NOT calibrated.
+            # CalibratedClassifierCV already produces well-calibrated probabilities;
+            # applying temperature on top would distort them.
+            # We detect calibration by checking if the classifier is a CalibratedClassifierCV
+            # instance (which has a 'calibrated_classifiers_' attribute after fitting).
+            is_calibrated = hasattr(self.classifier, "calibrated_classifiers_")
+            if not is_calibrated and temperature != 1.0:
+                # Temperature scaling: sharpen or flatten probabilities
+                # Convert probabilities back to logits, scale, then softmax
+                eps = 1e-12
+                logits = np.log(np.maximum(probabilities, eps))
+                scaled_logits = logits / temperature
+                scaled = np.exp(scaled_logits - np.max(scaled_logits))
+                scaled = scaled / np.sum(scaled)
+                confidence = float(np.max(scaled))
         except Exception as e:
             self.logger.warning(
                 "predict_proba failed for %s: %s",
@@ -166,9 +205,9 @@ class ModelBundle:
                     exc,
                 )
 
-        # Apply confidence threshold — return "Unknown" if confidence is too low
+        # Apply confidence threshold — return UNKNOWN_CATEGORY if confidence is too low
         if confidence < confidence_threshold:
-            category = "Unknown"
+            category = UNKNOWN_CATEGORY
         else:
             category = self.label_encoder.inverse_transform([prediction])[0]
 

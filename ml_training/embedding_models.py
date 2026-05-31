@@ -24,6 +24,7 @@ def get_sentence_encoder(model_id: Optional[str] = None):
     model_id = model_id or RANKING_MODEL_ID
     if model_id not in _encoder_cache:
         from sentence_transformers import SentenceTransformer
+
         _encoder_cache[model_id] = SentenceTransformer(model_id)
     return _encoder_cache[model_id]
 
@@ -64,12 +65,14 @@ def save_model_config(
     categorization_model: str = CATEGORIZATION_MODEL_ID,
     ranking_model: str = RANKING_MODEL_ID,
     use_spacy: bool = False,
+    model_type: Optional[str] = None,
 ) -> Path:
     config = {
         "parsing": {"pdf": "pymupdf", "nlp": SPACY_MODEL_ID},
         "categorization": {
             "backend": categorization_backend,
             "model": categorization_model,
+            "model_type": model_type,
         },
         "ranking": {"model": ranking_model},
         "preprocessing": {"use_spacy": use_spacy},

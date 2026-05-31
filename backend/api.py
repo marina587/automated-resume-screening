@@ -14,6 +14,7 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+UNKNOWN_CATEGORY = "Unknown"
 
 app = FastAPI(
     title="AI Resume Screening API",
@@ -51,8 +52,10 @@ class ModelManager:
             self.bundle = bundle
             self.is_loaded = True
             logger.info(
-                "Models loaded (categorization=%s, ranking=%s)",
+                "Models loaded (categorization=%s, model_type=%s, model_path=%s, ranking=%s)",
                 bundle.categorization_backend,
+                getattr(bundle, "loaded_model_type", None),
+                getattr(bundle, "loaded_model_path", None),
                 bundle.config.get("ranking", {}).get("model"),
             )
             return True
@@ -167,11 +170,13 @@ async def upload_resumes(files: List[UploadFile] = File(...)):
             try:
                 text = parser.extract_text(tmp_path)
                 if text:
-                    results.append({
-                        "filename": file.filename,
-                        "text": text,
-                        "file_type": Path(file.filename).suffix[1:].upper(),
-                    })
+                    results.append(
+                        {
+                            "filename": file.filename,
+                            "text": text,
+                            "file_type": Path(file.filename).suffix[1:].upper(),
+                        }
+                    )
             finally:
                 os.unlink(tmp_path)
 
@@ -231,9 +236,7 @@ async def screen_resumes(
         if not resumes:
             raise HTTPException(status_code=400, detail="No valid resumes uploaded")
 
-        ranked = model_manager.rank_resumes(
-            job_description, resumes, top_n=top_n
-        )
+        ranked = model_manager.rank_resumes(job_description, resumes, top_n=top_n)
 
         approval = ApprovalWorkflow(
             shortlist_threshold=shortlist_threshold,
@@ -249,8 +252,8 @@ async def screen_resumes(
                 resume["predicted_category"] = prediction["category"]
                 resume["category_confidence"] = prediction["confidence"]
             except Exception:
-                resume["predicted_category"] = None
-                resume["category_confidence"] = None
+                resume["predicted_category"] = UNKNOWN_CATEGORY
+                resume["category_confidence"] = 0.0
 
         return {
             "success": True,
@@ -328,4 +331,5 @@ async def get_available_categories():
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

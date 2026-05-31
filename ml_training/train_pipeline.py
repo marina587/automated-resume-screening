@@ -8,27 +8,26 @@ from pathlib import Path
 import logging
 
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 
 def run_training_pipeline(
     data_path: str = None,
-    output_dir: str = 'models',
+    output_dir: str = "models",
     max_features: int = 8000,
-    model_type: str = 'logistic',
+    model_type: str = "gradient_boosting",
     create_sample: bool = False,
     use_hf_dataset: bool = False,
     hf_max_rows: int = None,
     sample_size: int = 1000,
     balance_classes: bool = True,
     force_balance: bool = False,
-    feature_backend: str = 'minilm',
+    feature_backend: str = "minilm",
 ):
     """
-    Run the complete training pipeline.
+    Run the complete training pipeline with improved model selection.
     """
     logger.info("=" * 60)
     logger.info("Starting Resume Screening Training Pipeline")
@@ -43,6 +42,7 @@ def run_training_pipeline(
 
     if use_hf_dataset:
         from ml_training.load_hf_dataset import download_and_prepare
+
         logger.info("Downloading Hugging Face Resume-Screening-Dataset...")
         data_path = download_and_prepare(max_rows=hf_max_rows)
     elif create_sample or data_path is None:
@@ -54,12 +54,12 @@ def run_training_pipeline(
 
     explorations = preparator.explore_data()
     logger.info(f"Dataset shape: {explorations['shape']}")
-    if explorations.get('imbalance_ratio'):
+    if explorations.get("imbalance_ratio"):
         logger.info(f"Class imbalance ratio: {explorations['imbalance_ratio']:.2f}")
 
     df = preparator.clean_data()
 
-    if 'data_source' not in df.columns:
+    if "data_source" not in df.columns:
         df = preparator.assign_data_source(holdout_fraction=0.2)
     else:
         preparator.df = df
@@ -74,7 +74,7 @@ def run_training_pipeline(
 
     if balance_classes:
         logger.info("Balancing train split only (preserving holdout)...")
-        df = preparator.balance_classes(strategy='oversample', only_train=True)
+        df = preparator.balance_classes(strategy="oversample", only_train=True)
         n_rows = len(df)
         logger.info(f"Rows after balancing: {n_rows}")
 
@@ -91,11 +91,11 @@ def run_training_pipeline(
         preserve_technical_terms=True,
         section_aware=True,
     )
-    df['cleaned_text'] = df['resume_text'].apply(preprocessor.preprocess)
+    df["cleaned_text"] = df["resume_text"].apply(preprocessor.preprocess)
     logger.info(f"Preprocessed {len(df)} resumes")
     logger.info(f"Sample cleaned text:\n{df['cleaned_text'].iloc[0][:200]}...")
 
-    cleaned_path = Path('data/resumes_cleaned.csv')
+    cleaned_path = Path("data/resumes_cleaned.csv")
     cleaned_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(cleaned_path, index=False)
     logger.info(f"Saved cleaned data to {cleaned_path}")
@@ -113,9 +113,9 @@ def run_training_pipeline(
     )
     metrics = classifier.train(
         df,
-        text_column='cleaned_text',
-        raw_text_column='resume_text',
-        label_column='category',
+        text_column="cleaned_text",
+        raw_text_column="resume_text",
+        label_column="category",
     )
 
     logger.info("\n💾 STEP 4: Saving Models")
@@ -155,14 +155,14 @@ def run_training_pipeline(
     logger.info("=" * 60)
     logger.info(f"  - Accuracy: {metrics['accuracy']:.4f}")
     logger.info(f"  - F1 Score (macro): {metrics['f1_macro']:.4f}")
-    if metrics.get('holdout_metrics'):
-        hm = metrics['holdout_metrics']
+    if metrics.get("holdout_metrics"):
+        hm = metrics["holdout_metrics"]
         logger.info(f"  - Holdout accuracy: {hm['accuracy']:.4f} (n={hm['size']})")
 
     return {
-        'metrics': metrics,
-        'model_paths': saved_paths,
-        'cleaned_data_path': str(cleaned_path),
+        "metrics": metrics,
+        "model_paths": saved_paths,
+        "cleaned_data_path": str(cleaned_path),
     }
 
 
@@ -180,15 +180,16 @@ def compare_all_models(data_path: str = None, sample_size: int = 500):
     df = preparator.balance_classes()
 
     preprocessor = TextPreprocessor(section_aware=True)
-    df['cleaned_text'] = df['resume_text'].apply(preprocessor.preprocess)
+    df["cleaned_text"] = df["resume_text"].apply(preprocessor.preprocess)
 
-    return compare_models(df, text_column='cleaned_text', label_column='category')
+    return compare_models(df, text_column="cleaned_text", label_column="category")
 
 
 def main():
     # GPU check (moved inside main to avoid side effects on import)
     try:
         import torch
+
         if torch.cuda.is_available():
             logger.info("GPU available: %s", torch.cuda.get_device_name(0))
         else:
@@ -196,39 +197,45 @@ def main():
     except ImportError:
         logger.info("PyTorch not found — using CPU")
 
-    parser = argparse.ArgumentParser(description='Train Resume Screening Models')
-    parser.add_argument('--data', '-d', type=str, default=None)
-    parser.add_argument('--output', '-o', type=str, default='models')
-    parser.add_argument('--max-features', '-f', type=int, default=8000)
-    parser.add_argument('--model-type', '-m', type=str, default='logistic',
-                        choices=['logistic', 'random_forest', 'svm', 'knn'])
-    parser.add_argument('--compare', '-c', action='store_true')
-    parser.add_argument('--sample', '-s', action='store_true')
+    parser = argparse.ArgumentParser(description="Train Resume Screening Models")
+    parser.add_argument("--data", "-d", type=str, default=None)
+    parser.add_argument("--output", "-o", type=str, default="models")
+    parser.add_argument("--max-features", "-f", type=int, default=8000)
     parser.add_argument(
-        '--hf',
-        action='store_true',
-        help='Train on AzharAli05/Resume-Screening-Dataset from Hugging Face',
+        "--model-type",
+        "-m",
+        type=str,
+        default="gradient_boosting",
+        choices=["logistic", "random_forest", "gradient_boosting", "svm", "knn"],
+    )
+    parser.add_argument("--compare", "-c", action="store_true")
+    parser.add_argument("--sample", "-s", action="store_true")
+    parser.add_argument(
+        "--hf",
+        action="store_true",
+        help="Train on AzharAli05/Resume-Screening-Dataset from Hugging Face",
     )
     parser.add_argument(
-        '--hf-max-rows',
+        "--hf-max-rows",
         type=int,
         default=None,
-        help='Limit HF rows (for quick tests); default uses full ~10k dataset',
+        help="Limit HF rows (for quick tests); default uses full ~10k dataset",
     )
-    parser.add_argument('--sample-size', type=int, default=1000)
-    parser.add_argument('--no-balance', action='store_true',
-                        help='Skip class balancing oversampling')
+    parser.add_argument("--sample-size", type=int, default=1000)
     parser.add_argument(
-        '--balance',
-        action='store_true',
-        help='Force oversampling balance even on large datasets (>5000 rows)',
+        "--no-balance", action="store_true", help="Skip class balancing oversampling"
     )
     parser.add_argument(
-        '--feature-backend',
+        "--balance",
+        action="store_true",
+        help="Force oversampling balance even on large datasets (>5000 rows)",
+    )
+    parser.add_argument(
+        "--feature-backend",
         type=str,
-        default='minilm',
-        choices=['minilm', 'tfidf'],
-        help='Categorization: minilm (MiniLM embeddings) or tfidf',
+        default="minilm",
+        choices=["minilm", "tfidf"],
+        help="Categorization: minilm (MiniLM embeddings) or tfidf",
     )
 
     args = parser.parse_args()

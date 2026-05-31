@@ -96,9 +96,10 @@ def _load_cached_models(model_dir: str = None):
             ]
             model_path = Path("models")
             for p in possible_paths:
-                if (p / "logistic_model.pkl").exists():
-                    model_path = p
-                    break
+                if p.exists() and (p / "label_encoder.pkl").exists():
+                    if any(p.glob("*_model.pkl")):
+                        model_path = p
+                        break
         else:
             model_path = Path(model_dir)
 
@@ -150,6 +151,32 @@ def extract_skills(text: str) -> List[str]:
     from ml_training.text_preprocessing import extract_skills_from_text
 
     return extract_skills_from_text(text)
+
+
+def build_search_description(
+    job_title: str = "",
+    seniority: str = "",
+    experience_years: int = 0,
+    required_skills: str = "",
+    optional_skills: str = "",
+    industry: str = "",
+) -> str:
+    """Build a searchable job prompt from structured candidate parameters."""
+    parts = []
+    if job_title:
+        parts.append(f"Looking for a {job_title}")
+    if seniority:
+        parts.append(f"{seniority} level")
+    if experience_years:
+        parts.append(f"with at least {experience_years} years of experience")
+    if industry:
+        parts.append(f"in the {industry} industry")
+    if required_skills:
+        parts.append(f"Required skills: {required_skills}")
+    if optional_skills:
+        parts.append(f"Preferred skills: {optional_skills}")
+    description = ". ".join(parts).strip()
+    return description or "Looking for a qualified candidate with relevant skills and experience."
 
 
 def process_uploaded_files(uploaded_files) -> List[Dict]:
@@ -316,15 +343,66 @@ def main():
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.subheader("📝 Job Description")
-        job_description = st.text_area(
-            "Enter the job description",
-            height=200,
-            placeholder="Paste the full job description here...",
-            help="The system will match resumes against this description",
-        )
+        st.subheader("📝 Candidate Search")
+        tabs = st.tabs(["Job Description", "Search Parameters"])
 
-        # Extract and display skills from job description
+        with tabs[0]:
+            job_description = st.text_area(
+                "Enter the job description",
+                height=200,
+                placeholder="Paste the full job description here...",
+                help="The system will match resumes against this description",
+            )
+            search_mode = "Job Description"
+
+        with tabs[1]:
+            job_title = st.text_input(
+                "Target Job Title",
+                placeholder="e.g. Software Engineer, Data Scientist",
+                help="Enter the role you want to hire for.",
+            )
+            seniority = st.selectbox(
+                "Seniority Level",
+                ["", "Junior", "Mid-level", "Senior", "Lead", "Manager"],
+                help="Choose the candidate level you are looking for.",
+            )
+            experience_years = st.slider(
+                "Minimum Years of Experience",
+                min_value=0,
+                max_value=20,
+                value=3,
+                help="Select the minimum experience for the role.",
+            )
+            industry = st.text_input(
+                "Industry",
+                placeholder="e.g. FinTech, Healthcare, E-commerce",
+                help="Optional industry or domain experience.",
+            )
+            required_skills = st.text_area(
+                "Required Skills",
+                placeholder="e.g. Python, AWS, SQL",
+                help="List the mandatory skills for this position.",
+                height=100,
+            )
+            optional_skills = st.text_area(
+                "Preferred Skills",
+                placeholder="e.g. Docker, Kubernetes, leadership",
+                help="List any additional desirable skills.",
+                height=100,
+            )
+            job_description = build_search_description(
+                job_title=job_title,
+                seniority=seniority,
+                experience_years=experience_years,
+                required_skills=required_skills,
+                optional_skills=optional_skills,
+                industry=industry,
+            )
+            st.caption("Generated search prompt based on selected parameters:")
+            st.markdown(f"`{job_description}`")
+            search_mode = "Search Parameters"
+
+        # Extract and display skills from the effective search query
         if job_description:
             jd_skills = extract_skills(job_description)
             if jd_skills:
