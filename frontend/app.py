@@ -160,6 +160,9 @@ def build_search_description(
     required_skills: str = "",
     optional_skills: str = "",
     industry: str = "",
+    location: str = "",
+    education_level: str = "",
+    remote_preference: str = "",
 ) -> str:
     """Build a searchable job prompt from structured candidate parameters."""
     parts = []
@@ -171,12 +174,21 @@ def build_search_description(
         parts.append(f"with at least {experience_years} years of experience")
     if industry:
         parts.append(f"in the {industry} industry")
+    if location:
+        parts.append(f"based in {location}")
+    if education_level:
+        parts.append(f"with {education_level} education")
+    if remote_preference:
+        parts.append(remote_preference)
     if required_skills:
         parts.append(f"Required skills: {required_skills}")
     if optional_skills:
         parts.append(f"Preferred skills: {optional_skills}")
     description = ". ".join(parts).strip()
-    return description or "Looking for a qualified candidate with relevant skills and experience."
+    return (
+        description
+        or "Looking for a qualified candidate with relevant skills and experience."
+    )
 
 
 def process_uploaded_files(uploaded_files) -> List[Dict]:
@@ -346,6 +358,9 @@ def main():
         st.subheader("📝 Candidate Search")
         tabs = st.tabs(["Job Description", "Search Parameters"])
 
+        job_description = ""
+        generated_description = ""
+
         with tabs[0]:
             job_description = st.text_area(
                 "Enter the job description",
@@ -353,7 +368,6 @@ def main():
                 placeholder="Paste the full job description here...",
                 help="The system will match resumes against this description",
             )
-            search_mode = "Job Description"
 
         with tabs[1]:
             job_title = st.text_input(
@@ -378,6 +392,21 @@ def main():
                 placeholder="e.g. FinTech, Healthcare, E-commerce",
                 help="Optional industry or domain experience.",
             )
+            location = st.text_input(
+                "Preferred Location",
+                placeholder="e.g. Remote, New York, Berlin",
+                help="Specify the preferred candidate location or remote status.",
+            )
+            education_level = st.selectbox(
+                "Education Level",
+                ["", "High School", "Associate", "Bachelor's", "Master's", "PhD"],
+                help="Select the minimum education level for the role.",
+            )
+            remote_preference = st.selectbox(
+                "Remote Preference",
+                ["", "Remote", "Hybrid", "On-site", "Open to relocation"],
+                help="Choose the desired working arrangement.",
+            )
             required_skills = st.text_area(
                 "Required Skills",
                 placeholder="e.g. Python, AWS, SQL",
@@ -390,19 +419,23 @@ def main():
                 help="List any additional desirable skills.",
                 height=100,
             )
-            job_description = build_search_description(
+            generated_description = build_search_description(
                 job_title=job_title,
                 seniority=seniority,
                 experience_years=experience_years,
                 required_skills=required_skills,
                 optional_skills=optional_skills,
                 industry=industry,
+                location=location,
+                education_level=education_level,
+                remote_preference=remote_preference,
             )
             st.caption("Generated search prompt based on selected parameters:")
-            st.markdown(f"`{job_description}`")
-            search_mode = "Search Parameters"
+            st.markdown(f"`{generated_description}`")
 
-        # Extract and display skills from the effective search query
+        if not job_description:
+            job_description = generated_description
+
         if job_description:
             jd_skills = extract_skills(job_description)
             if jd_skills:
