@@ -205,11 +205,16 @@ class ModelBundle:
                     exc,
                 )
 
-        # Apply confidence threshold — return UNKNOWN_CATEGORY if confidence is too low
-        if confidence < confidence_threshold:
+        # Two-tier Unknown detection:
+        # 1. If the model itself predicted "Unknown", respect that directly.
+        # 2. Otherwise, fall back to confidence threshold for low-confidence predictions.
+        predicted_category = self.label_encoder.inverse_transform([prediction])[0]
+        if predicted_category == UNKNOWN_CATEGORY:
+            category = UNKNOWN_CATEGORY
+        elif confidence < confidence_threshold:
             category = UNKNOWN_CATEGORY
         else:
-            category = self.label_encoder.inverse_transform([prediction])[0]
+            category = predicted_category
 
         return {
             "category": category,

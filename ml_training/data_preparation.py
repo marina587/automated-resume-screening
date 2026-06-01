@@ -187,10 +187,14 @@ class DataPreparator:
         strategy: str = 'oversample',
         random_state: int = 42,
         only_train: bool = True,
+        unknown_category: str = UNKNOWN_CATEGORY,
     ) -> pd.DataFrame:
         """
         Address class imbalance via oversampling minority classes or undersampling majority.
         When data_source exists, only rebalances 'train' rows so holdout stays untouched.
+
+        The 'Unknown' category is excluded from oversampling/undersampling — it is kept
+        at its original count to avoid diluting known-category signals.
         """
         if self.df is None:
             raise ValueError("No data loaded")
@@ -198,7 +202,15 @@ class DataPreparator:
         rng = np.random.default_rng(random_state)
 
         def _balance_frame(frame: pd.DataFrame) -> pd.DataFrame:
-            groups = [group for _, group in frame.groupby(target_column)]
+            # Separate Unknown from known categories
+            unknown_mask = frame[target_column] == unknown_category
+            unknown_df = frame[unknown_mask]
+            known_df = frame[~unknown_mask]
+
+            if len(known_df) == 0:
+                return frame
+
+            groups = [group for _, group in known_df.groupby(target_column)]
             counts = [len(g) for g in groups]
             target_n = min(counts) if strategy == 'undersample' else max(counts)
 
@@ -214,6 +226,9 @@ class DataPreparator:
                     )
                 else:
                     balanced_parts.append(group)
+
+            # Append Unknown rows unchanged (not oversampled/undersampled)
+            balanced_parts.append(unknown_df)
             return pd.concat(balanced_parts, ignore_index=True)
 
         if only_train and 'data_source' in self.df.columns:

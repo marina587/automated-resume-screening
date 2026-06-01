@@ -514,13 +514,23 @@ def compare_models(
 
 
 if __name__ == "__main__":
-    from data_preparation import create_sample_dataset, DataPreparator
+    from data_preparation import (
+        create_sample_dataset,
+        DataPreparator,
+        add_unknown_samples,
+        UNKNOWN_CATEGORY,
+    )
     from text_preprocessing import TextPreprocessor
 
     sample_path = create_sample_dataset(n_samples=500)
     preparator = DataPreparator(sample_path)
     df = preparator.load_data()
     df = preparator.clean_data()
+
+    # Add Unknown-category samples for out-of-distribution detection
+    df = add_unknown_samples(df, unknown_fraction=0.15, random_state=42)
+    preparator.df = df
+
     df = preparator.balance_classes()
 
     preprocessor = TextPreprocessor(use_lemmatization=True)
@@ -534,8 +544,20 @@ if __name__ == "__main__":
     metrics = classifier.train(df)
     classifier.save()
 
+    # Test known category
     test_text = "experienced software engineer python java machine learning aws docker"
     prediction, confidence = classifier.predict_category(
         preprocessor.preprocess(test_text), raw_text=test_text
     )
-    print(f"\nTest prediction: {prediction} (confidence: {confidence:.2%})")
+    print(f"\nTest prediction (known): {prediction} (confidence: {confidence:.2%})")
+
+    # Test out-of-distribution (should be Unknown)
+    unknown_text = "registered nurse with 10 years of critical care experience"
+    unknown_pred, unknown_conf = classifier.predict_category(
+        preprocessor.preprocess(unknown_text), raw_text=unknown_text
+    )
+    print(f"Test prediction (OOD):  {unknown_pred} (confidence: {unknown_conf:.2%})")
+    if unknown_pred == UNKNOWN_CATEGORY:
+        print("✅ OOD correctly detected as Unknown")
+    else:
+        print(f"❌ OOD misclassified as '{unknown_pred}' — expected '{UNKNOWN_CATEGORY}'")
