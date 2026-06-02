@@ -20,8 +20,6 @@ from .embedding_models import (
 from .resume_ranking import ResumeRanker
 from .text_preprocessing import TextPreprocessor
 
-UNKNOWN_CATEGORY = "Unknown"
-
 
 class ModelBundle:
     """Loaded categorization + ranking models."""
@@ -61,25 +59,36 @@ class ModelBundle:
         model_type = self.config.get("categorization", {}).get("model_type")
         if model_type:
             model_path = self.model_dir / f"{model_type}_model.pkl"
-        else:
-            # Fallback for legacy artifacts: detect any saved classifier model.
-            model_path = None
-            for candidate in [
-                "logistic",
-                "random_forest",
-                "gradient_boosting",
-                "svm",
-                "knn",
-            ]:
-                candidate_path = self.model_dir / f"{candidate}_model.pkl"
-                if candidate_path.exists():
-                    model_path = candidate_path
-                    break
-            if model_path is None:
+            if not model_path.exists():
+                self.logger.error(
+                    "Configured model_type '%s' not found at %s",
+                    model_type,
+                    model_path,
+                )
                 return False
-
-        if not model_path.exists():
-            return False
+        else:
+            candidate_models = [
+                self.model_dir / f"{candidate}_model.pkl"
+                for candidate in [
+                    "logistic",
+                    "random_forest",
+                    "gradient_boosting",
+                    "svm",
+                    "knn",
+                    "xgboost",
+                ]
+                if (self.model_dir / f"{candidate}_model.pkl").exists()
+            ]
+            if not candidate_models:
+                return False
+            if len(candidate_models) > 1:
+                self.logger.warning(
+                    "Multiple model artifacts found in %s: %s. Using %s.",
+                    self.model_dir,
+                    [p.name for p in candidate_models],
+                    candidate_models[0].name,
+                )
+            model_path = candidate_models[0]
 
         self.classifier = joblib.load(model_path)
         self.label_encoder = joblib.load(encoder_path)
@@ -87,13 +96,23 @@ class ModelBundle:
         self.loaded_model_type = model_type or model_path.name.replace("_model.pkl", "")
 
         vectorizer_path = self.model_dir / "vectorizer.pkl"
-        if vectorizer_path.exists() and self.categorization_backend == "tfidf":
+        if self.categorization_backend == "tfidf":
+            if not vectorizer_path.exists():
+                self.logger.error(
+                    "TF-IDF backend configured but vectorizer not found at %s",
+                    vectorizer_path,
+                )
+                return False
             self.vectorizer = joblib.load(vectorizer_path)
 
         feature_extractor_path = self.model_dir / "feature_extractor.pkl"
         if feature_extractor_path.exists():
             self.feature_extractor = joblib.load(feature_extractor_path)
             self.use_structured_features = True
+
+        if self.label_encoder is None or len(self.label_encoder.classes_) == 0:
+            self.logger.error("Loaded label encoder is empty or invalid")
+            return False
 
         self.is_loaded = True
         return True
@@ -132,10 +151,6 @@ class ModelBundle:
         produce well-calibrated probabilities, and applying temperature on top
         would distort the calibration.
 
-        If the maximum predicted probability is below `confidence_threshold`,
-        the category is set to "Unknown" to avoid forcing an unrelated resume
-        into one of the known categories.
-
         Args:
             text: Raw resume text to classify.
             temperature: Temperature scaling factor (default 0.85).
@@ -144,8 +159,7 @@ class ModelBundle:
                          T > 1 flattens probabilities.
                          Only applied when the model is NOT calibrated.
             confidence_threshold: Minimum confidence to accept a prediction.
-                                  Below this threshold, returns "Unknown"
-                                  (default 0.3).
+                                  Used for reporting, not forced fallback.
 
         Raises:
             ValueError: If temperature <= 0 (would cause division by zero or NaN).
@@ -205,16 +219,8 @@ class ModelBundle:
                     exc,
                 )
 
-        # Two-tier Unknown detection:
-        # 1. If the model itself predicted "Unknown", respect that directly.
-        # 2. Otherwise, fall back to confidence threshold for low-confidence predictions.
         predicted_category = self.label_encoder.inverse_transform([prediction])[0]
-        if predicted_category == UNKNOWN_CATEGORY:
-            category = UNKNOWN_CATEGORY
-        elif confidence < confidence_threshold:
-            category = UNKNOWN_CATEGORY
-        else:
-            category = predicted_category
+        category = predicted_category
 
         return {
             "category": category,

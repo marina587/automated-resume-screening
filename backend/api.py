@@ -14,7 +14,6 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-UNKNOWN_CATEGORY = "Unknown"
 
 app = FastAPI(
     title="AI Resume Screening API",
@@ -251,9 +250,11 @@ async def screen_resumes(
                 prediction = model_manager.predict_category(text_for_prediction)
                 resume["predicted_category"] = prediction["category"]
                 resume["category_confidence"] = prediction["confidence"]
-            except Exception:
-                resume["predicted_category"] = UNKNOWN_CATEGORY
+                resume["prediction_error"] = None
+            except Exception as e:
+                resume["predicted_category"] = None
                 resume["category_confidence"] = 0.0
+                resume["prediction_error"] = str(e)
 
         return {
             "success": True,

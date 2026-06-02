@@ -8,64 +8,63 @@ import numpy as np
 from pathlib import Path
 import re
 
-
 # Category sampling weights (majority classes oversampled in raw data — balance later)
 CATEGORY_WEIGHTS = {
-    'Software Engineer': 0.22,
-    'Backend Developer': 0.14,
-    'Frontend Developer': 0.12,
-    'Full Stack Developer': 0.10,
-    'Data Scientist': 0.10,
-    'Machine Learning Engineer': 0.08,
-    'DevOps Engineer': 0.08,
-    'Data Analyst': 0.07,
-    'Product Manager': 0.05,
-    'UX Designer': 0.04,
+    "Software Engineer": 0.22,
+    "Backend Developer": 0.14,
+    "Frontend Developer": 0.12,
+    "Full Stack Developer": 0.10,
+    "Data Scientist": 0.10,
+    "Machine Learning Engineer": 0.08,
+    "DevOps Engineer": 0.08,
+    "Data Analyst": 0.07,
+    "Product Manager": 0.05,
+    "UX Designer": 0.04,
 }
 
 ROLE_TEMPLATES = {
-    'Data Scientist': [
+    "Data Scientist": [
         "Data Scientist with {years}+ years applying Python {pyver}, scikit-learn, and {ml_stack}. "
         "Built predictive models using {cloud} and SQL. MS in Statistics. "
         "Skills: Pandas, NumPy, TensorFlow {tfver}, NLP, data visualization.",
         "Senior Data Scientist — {years} years in ML pipelines, A/B testing, and stakeholder reporting. "
         "Proficient in Python 3.{py_minor}, PyTorch, Spark, and Tableau. PhD coursework in machine learning.",
     ],
-    'Software Engineer': [
+    "Software Engineer": [
         "Software Engineer ({years}+ yrs) — Java {javaver}, Spring Boot, microservices on {cloud}. "
         "CI/CD with Jenkins, Docker, Kubernetes. BS Computer Science.",
         "Backend-focused Software Engineer using C++, Python, and REST APIs. "
         "Experience with .NET Core, PostgreSQL, Redis, and Agile/Scrum teams since {start_year}.",
     ],
-    'Product Manager': [
+    "Product Manager": [
         "Product Manager with {years} years driving roadmaps, user research, and KPI tracking. "
         "Agile ceremonies, Jira, and cross-functional leadership with engineering and design.",
     ],
-    'UX Designer': [
+    "UX Designer": [
         "UX Designer — {years} years wireframing in Figma, usability testing, and design systems. "
         "Portfolio includes mobile and web UI/UX for SaaS products.",
     ],
-    'DevOps Engineer': [
+    "DevOps Engineer": [
         "DevOps Engineer — {years}+ years: Terraform, Kubernetes, AWS, CI/CD, monitoring. "
         "Automated deployments with Docker and Python scripting.",
     ],
-    'Data Analyst': [
+    "Data Analyst": [
         "Data Analyst ({years} yrs) — SQL, Power BI, Excel, statistical reporting for business units. "
         "Experience with Python for automation and dashboarding.",
     ],
-    'Machine Learning Engineer': [
+    "Machine Learning Engineer": [
         "ML Engineer deploying models at scale — PyTorch, TensorFlow 2.x, MLOps on {cloud}. "
         "{years}+ years in computer vision and NLP production systems.",
     ],
-    'Frontend Developer': [
+    "Frontend Developer": [
         "Frontend Developer specializing in React.js, TypeScript, CSS3, and accessibility. "
         "{years} years building responsive SPAs with Node.js backends.",
     ],
-    'Backend Developer': [
+    "Backend Developer": [
         "Backend Developer — Node.js, GraphQL, PostgreSQL, Redis. "
         "{years}+ years designing scalable APIs and event-driven architectures.",
     ],
-    'Full Stack Developer': [
+    "Full Stack Developer": [
         "Full Stack Developer — MERN stack, GraphQL, MongoDB. "
         "{years} years end-to-end delivery with React and Express.js on {cloud}.",
     ],
@@ -99,22 +98,23 @@ class DataPreparator:
             raise ValueError("No data loaded. Call load_data() first.")
 
         imbalance_ratio = None
-        if 'category' in self.df.columns:
-            counts = self.df['category'].value_counts()
+        if "category" in self.df.columns:
+            counts = self.df["category"].value_counts()
             if len(counts) > 1:
                 imbalance_ratio = float(counts.max() / counts.min())
 
         results = {
-            'shape': self.df.shape,
-            'columns': list(self.df.columns),
-            'missing_values': self.df.isnull().sum().to_dict(),
-            'duplicates': int(self.df.duplicated().sum()),
-            'class_distribution': (
-                self.df['category'].value_counts().to_dict()
-                if 'category' in self.df.columns else {}
+            "shape": self.df.shape,
+            "columns": list(self.df.columns),
+            "missing_values": self.df.isnull().sum().to_dict(),
+            "duplicates": int(self.df.duplicated().sum()),
+            "class_distribution": (
+                self.df["category"].value_counts().to_dict()
+                if "category" in self.df.columns
+                else {}
             ),
-            'imbalance_ratio': imbalance_ratio,
-            'sample_data': self.df.head(3).to_dict(),
+            "imbalance_ratio": imbalance_ratio,
+            "sample_data": self.df.head(3).to_dict(),
         }
 
         print(f"Dataset shape: {results['shape']}")
@@ -128,13 +128,20 @@ class DataPreparator:
         )
         return results
 
-    def clean_data(self, category_column: str = None, text_column: str = None) -> pd.DataFrame:
+    def clean_data(
+        self, category_column: str = None, text_column: str = None
+    ) -> pd.DataFrame:
         if self.df is None:
             raise ValueError("No data loaded")
 
         if text_column is None:
             possible_text_cols = [
-                'resume_text', 'resume', 'text', 'content', 'description', 'resume_content',
+                "resume_text",
+                "resume",
+                "text",
+                "content",
+                "description",
+                "resume_content",
             ]
             for col in possible_text_cols:
                 if col in self.df.columns:
@@ -147,8 +154,15 @@ class DataPreparator:
 
         if category_column is None:
             possible_cat_cols = [
-                'category', 'label', 'class', 'job_title', 'job_category',
-                'role', 'designation', 'job_role', 'position',
+                "category",
+                "label",
+                "class",
+                "job_title",
+                "job_category",
+                "role",
+                "designation",
+                "job_role",
+                "position",
             ]
             for col in possible_cat_cols:
                 if col in self.df.columns:
@@ -159,42 +173,40 @@ class DataPreparator:
                     f"Could not find category column. Available: {list(self.df.columns)}"
                 )
 
-        print(f"Using text column: '{text_column}', category column: '{category_column}'")
+        print(
+            f"Using text column: '{text_column}', category column: '{category_column}'"
+        )
 
         rename_map = {}
-        if text_column != 'resume_text':
-            rename_map[text_column] = 'resume_text'
-        if category_column != 'category':
-            rename_map[category_column] = 'category'
+        if text_column != "resume_text":
+            rename_map[text_column] = "resume_text"
+        if category_column != "category":
+            rename_map[category_column] = "category"
         if rename_map:
             self.df = self.df.rename(columns=rename_map)
             print(f"Renamed columns: {rename_map}")
 
-        self.df['resume_text'] = self.df['resume_text'].astype(str)
-        self.df['category'] = self.df['category'].astype(str)
+        self.df["resume_text"] = self.df["resume_text"].astype(str)
+        self.df["category"] = self.df["category"].astype(str)
 
-        self.df = self.df.dropna(subset=['resume_text', 'category'])
-        self.df = self.df[self.df['resume_text'].str.strip() != '']
-        self.df = self.df[self.df['category'].str.strip() != '']
-        self.df = self.df.drop_duplicates(subset=['resume_text'])
+        self.df = self.df.dropna(subset=["resume_text", "category"])
+        self.df = self.df[self.df["resume_text"].str.strip() != ""]
+        self.df = self.df[self.df["category"].str.strip() != ""]
+        self.df = self.df.drop_duplicates(subset=["resume_text"])
 
         print(f"Cleaned dataset: {len(self.df)} resumes remaining")
         return self.df
 
     def balance_classes(
         self,
-        target_column: str = 'category',
-        strategy: str = 'oversample',
+        target_column: str = "category",
+        strategy: str = "oversample",
         random_state: int = 42,
         only_train: bool = True,
-        unknown_category: str = UNKNOWN_CATEGORY,
     ) -> pd.DataFrame:
         """
         Address class imbalance via oversampling minority classes or undersampling majority.
         When data_source exists, only rebalances 'train' rows so holdout stays untouched.
-
-        The 'Unknown' category is excluded from oversampling/undersampling — it is kept
-        at its original count to avoid diluting known-category signals.
         """
         if self.df is None:
             raise ValueError("No data loaded")
@@ -202,17 +214,12 @@ class DataPreparator:
         rng = np.random.default_rng(random_state)
 
         def _balance_frame(frame: pd.DataFrame) -> pd.DataFrame:
-            # Separate Unknown from known categories
-            unknown_mask = frame[target_column] == unknown_category
-            unknown_df = frame[unknown_mask]
-            known_df = frame[~unknown_mask]
-
-            if len(known_df) == 0:
+            groups = [group for _, group in frame.groupby(target_column)]
+            if not groups:
                 return frame
 
-            groups = [group for _, group in known_df.groupby(target_column)]
             counts = [len(g) for g in groups]
-            target_n = min(counts) if strategy == 'undersample' else max(counts)
+            target_n = min(counts) if strategy == "undersample" else max(counts)
 
             balanced_parts = []
             for group in groups:
@@ -220,26 +227,26 @@ class DataPreparator:
                 if n < target_n:
                     extra_idx = rng.choice(group.index, size=target_n - n, replace=True)
                     balanced_parts.append(pd.concat([group, frame.loc[extra_idx]]))
-                elif n > target_n and strategy == 'undersample':
+                elif n > target_n and strategy == "undersample":
                     balanced_parts.append(
                         group.sample(n=target_n, random_state=random_state)
                     )
                 else:
                     balanced_parts.append(group)
 
-            # Append Unknown rows unchanged (not oversampled/undersampled)
-            balanced_parts.append(unknown_df)
             return pd.concat(balanced_parts, ignore_index=True)
 
-        if only_train and 'data_source' in self.df.columns:
-            train_df = self.df[self.df['data_source'] == 'train']
-            holdout_df = self.df[self.df['data_source'] == 'holdout']
+        if only_train and "data_source" in self.df.columns:
+            train_df = self.df[self.df["data_source"] == "train"]
+            holdout_df = self.df[self.df["data_source"] == "holdout"]
             train_balanced = _balance_frame(train_df)
             self.df = pd.concat([train_balanced, holdout_df], ignore_index=True)
         else:
             self.df = _balance_frame(self.df)
 
-        self.df = self.df.sample(frac=1, random_state=random_state).reset_index(drop=True)
+        self.df = self.df.sample(frac=1, random_state=random_state).reset_index(
+            drop=True
+        )
         print(f"Balanced dataset ({strategy}): {len(self.df)} rows")
         print(self.df[target_column].value_counts())
         return self.df
@@ -256,16 +263,15 @@ class DataPreparator:
         if self.df is None:
             raise ValueError("No data loaded")
 
-        if 'data_source' in self.df.columns:
+        if "data_source" in self.df.columns:
             return self.df
 
         rng = np.random.default_rng(random_state)
         n_holdout = max(1, int(len(self.df) * holdout_fraction))
         holdout_idx = set(rng.choice(self.df.index, size=n_holdout, replace=False))
 
-        self.df['data_source'] = [
-            'holdout' if idx in holdout_idx else 'train'
-            for idx in self.df.index
+        self.df["data_source"] = [
+            "holdout" if idx in holdout_idx else "train" for idx in self.df.index
         ]
         print(
             f"Assigned data_source: "
@@ -274,7 +280,7 @@ class DataPreparator:
         )
         return self.df
 
-    def save_cleaned_data(self, output_path: str = 'data/resumes_cleaned.csv'):
+    def save_cleaned_data(self, output_path: str = "data/resumes_cleaned.csv"):
         if self.df is None:
             raise ValueError("No data to save")
 
@@ -284,7 +290,9 @@ class DataPreparator:
         return output_path
 
 
-def _render_template(category: str, template: str, rng: np.random.Generator, holdout: bool) -> str:
+def _render_template(
+    category: str, template: str, rng: np.random.Generator, holdout: bool
+) -> str:
     years = int(rng.integers(2, 15))
     py_minor = int(rng.integers(8, 12))
     start_year = 2026 - years
@@ -298,12 +306,14 @@ def _render_template(category: str, template: str, rng: np.random.Generator, hol
         cloud=rng.choice(["AWS", "Azure", "GCP"]),
         start_year=start_year,
     )
-    extras = rng.choice([
-        f" Certifications: {rng.choice(['AWS Certified', 'PMP', 'CKA'])}.",
-        f" Tools: {rng.choice(['Jira', 'Confluence', 'Datadog'])}.",
-        f" Languages: {rng.choice(['English (native)', 'Spanish (professional)'])}.",
-        "",
-    ])
+    extras = rng.choice(
+        [
+            f" Certifications: {rng.choice(['AWS Certified', 'PMP', 'CKA'])}.",
+            f" Tools: {rng.choice(['Jira', 'Confluence', 'Datadog'])}.",
+            f" Languages: {rng.choice(['English (native)', 'Spanish (professional)'])}.",
+            "",
+        ]
+    )
     text = text + extras
     if holdout:
         text = rng.choice(HOLDOUT_STYLE_PREFIX) + text
@@ -311,7 +321,7 @@ def _render_template(category: str, template: str, rng: np.random.Generator, hol
 
 
 def create_sample_dataset(
-    output_path: str = 'data/sample_resumes.csv',
+    output_path: str = "data/sample_resumes.csv",
     n_samples: int = 1000,
     holdout_fraction: float = 0.2,
     random_state: int = 42,
@@ -343,18 +353,22 @@ def create_sample_dataset(
         if len(noise_skills):
             resume_text += " Additional: " + ", ".join(noise_skills) + "."
 
-        data.append({
-            'resume_text': resume_text,
-            'category': category,
-            'data_source': 'holdout' if is_holdout else 'train',
-        })
+        data.append(
+            {
+                "resume_text": resume_text,
+                "category": category,
+                "data_source": "holdout" if is_holdout else "train",
+            }
+        )
 
     df = pd.DataFrame(data)
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False)
     print(f"Created sample dataset with {n_samples} resumes at {output_path}")
-    print(f"  Holdout: {(df['data_source'] == 'holdout').sum()}, Train: {(df['data_source'] == 'train').sum()}")
-    print(df['category'].value_counts())
+    print(
+        f"  Holdout: {(df['data_source'] == 'holdout').sum()}, Train: {(df['data_source'] == 'train').sum()}"
+    )
+    print(df["category"].value_counts())
     return output_path
 
 

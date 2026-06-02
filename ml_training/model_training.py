@@ -17,6 +17,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
+from xgboost import XGBClassifier
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -41,7 +42,7 @@ class ResumeClassifier:
     def __init__(
         self,
         max_features: int = 8000,
-        model_type: str = "logistic",
+        model_type: str = "xgboost",
         use_structured_features: bool = True,
         feature_backend: str = "minilm",
         categorization_model_id: str = CATEGORIZATION_MODEL_ID,
@@ -91,6 +92,20 @@ class ResumeClassifier:
                 subsample=0.8,
                 random_state=42,
                 verbose=0,
+            )
+        elif self.model_type == "xgboost":
+            return XGBClassifier(
+                objective="multi:softprob",
+                n_estimators=200,
+                learning_rate=0.1,
+                max_depth=7,
+                subsample=0.8,
+                colsample_bytree=0.8,
+                use_label_encoder=False,
+                eval_metric="mlogloss",
+                random_state=42,
+                n_jobs=-1,
+                verbosity=0,
             )
         elif self.model_type == "svm":
             return SVC(
@@ -255,30 +270,65 @@ class ResumeClassifier:
         # Create and fit model (single fit — no redundant pre-fit)
         self.model = self._create_model()
 
-        # Hyperparameter tuning for LogisticRegression
-        if tune_hyperparams and self.model_type == "logistic" and len(y_train) >= 200:
+        # Hyperparameter tuning for selected models
+        if tune_hyperparams and len(y_train) >= 200:
             from sklearn.model_selection import GridSearchCV
 
-            param_grid = {"C": [0.1, 0.5, 1.0, 2.0, 5.0]}
-            base_model = LogisticRegression(
-                max_iter=2000,
-                class_weight="balanced",
-                random_state=42,
-            )
-            grid = GridSearchCV(
-                base_model,
-                param_grid,
-                cv=3,
-                scoring="f1_macro",
-                n_jobs=-1,
-                verbose=0,
-            )
-            grid.fit(X_train, y_train)
-            self.model = grid.best_estimator_
-            print(
-                f"[OK] Best C={grid.best_params_['C']} "
-                f"(CV F1={grid.best_score_:.4f}) from grid search"
-            )
+            if self.model_type == "logistic":
+                param_grid = {"C": [0.1, 0.5, 1.0, 2.0, 5.0]}
+                base_model = LogisticRegression(
+                    max_iter=2000,
+                    class_weight="balanced",
+                    random_state=42,
+                )
+            elif self.model_type == "random_forest":
+                param_grid = {
+                    "n_estimators": [100, 200],
+                    "max_depth": [10, 20, None],
+                    "min_samples_split": [2, 5],
+                }
+                base_model = RandomForestClassifier(
+                    class_weight="balanced_subsample",
+                    random_state=42,
+                    n_jobs=-1,
+                    verbose=0,
+                )
+            elif self.model_type == "xgboost":
+                param_grid = {
+                    "n_estimators": [100, 200],
+                    "max_depth": [4, 6, 8],
+                    "learning_rate": [0.05, 0.1],
+                    "subsample": [0.7, 0.9],
+                }
+                base_model = XGBClassifier(
+                    objective="multi:softprob",
+                    use_label_encoder=False,
+                    eval_metric="mlogloss",
+                    random_state=42,
+                    n_jobs=-1,
+                    verbosity=0,
+                )
+            else:
+                base_model = self._create_model()
+                param_grid = None
+
+            if param_grid is not None:
+                grid = GridSearchCV(
+                    base_model,
+                    param_grid,
+                    cv=3,
+                    scoring="f1_macro",
+                    n_jobs=-1,
+                    verbose=0,
+                )
+                grid.fit(X_train, y_train)
+                self.model = grid.best_estimator_
+                print(
+                    f"[OK] Best params={grid.best_params_} "
+                    f"(CV F1={grid.best_score_:.4f}) from grid search"
+                )
+            else:
+                self.model = self._create_model()
         else:
             self.model = self._create_model()
 
@@ -409,26 +459,36 @@ class ResumeClassifier:
         if not self.is_trained:
             raise ValueError("No trained model to save")
 
-        Path(model_dir).mkdir(parents=True, exist_ok=True)
+        model_dir_path = Path(model_dir)
+        model_dir_path.mkdir(parents=True, exist_ok=True)
 
-        model_path = Path(model_dir) / f"{self.model_type}_model.pkl"
-        vectorizer_path = Path(model_dir) / "vectorizer.pkl"
-        encoder_path = Path(model_dir) / "label_encoder.pkl"
-        feature_extractor_path = Path(model_dir) / "feature_extractor.pkl"
+        model_path = model_dir_path / f"{self.model_type}_model.pkl"
+        vectorizer_path = model_dir_path / "vectorizer.pkl"
+        encoder_path = model_dir_path / "label_encoder.pkl"
+        feature_extractor_path = model_dir_path / "feature_extractor.pkl"
 
         joblib.dump(self.model, model_path)
         joblib.dump(self.label_encoder, encoder_path)
         if self.feature_backend == "tfidf":
             joblib.dump(self.vectorizer, vectorizer_path)
+        elif vectorizer_path.exists():
+            vectorizer_path.unlink()
+
         if self.use_structured_features:
             joblib.dump(self.feature_extractor, feature_extractor_path)
+        elif feature_extractor_path.exists():
+            feature_extractor_path.unlink()
 
         config_path = save_model_config(
-            model_dir,
+            model_dir_path,
             categorization_backend=self.feature_backend,
             categorization_model=self.categorization_model_id,
             use_spacy=self.use_spacy,
             model_type=self.model_type,
+        )
+
+        self._cleanup_stale_model_artifacts(
+            model_dir_path, keep_model_name=model_path.name
         )
 
         print(f"Model saved to {model_path}")
@@ -449,6 +509,14 @@ class ResumeClassifier:
         if self.use_structured_features:
             result["feature_extractor"] = str(feature_extractor_path)
         return result
+
+    def _cleanup_stale_model_artifacts(self, model_dir: Path, keep_model_name: str):
+        for candidate in model_dir.glob("*_model.pkl"):
+            if candidate.name != keep_model_name:
+                try:
+                    candidate.unlink()
+                except OSError:
+                    pass
 
     def load(self, model_dir: str = "models", model_type: str = None):
         model_type = model_type or self.model_type
@@ -486,7 +554,7 @@ def compare_models(
     text_column: str = "cleaned_text",
     label_column: str = "category",
 ) -> Dict[str, Dict]:
-    models = ["gradient_boosting", "random_forest", "logistic", "svm"]
+    models = ["gradient_boosting", "random_forest", "logistic", "svm", "xgboost"]
     results = {}
 
     for model_type in models:
@@ -514,12 +582,7 @@ def compare_models(
 
 
 if __name__ == "__main__":
-    from data_preparation import (
-        create_sample_dataset,
-        DataPreparator,
-        add_unknown_samples,
-        UNKNOWN_CATEGORY,
-    )
+    from data_preparation import create_sample_dataset, DataPreparator
     from text_preprocessing import TextPreprocessor
 
     sample_path = create_sample_dataset(n_samples=500)
@@ -527,9 +590,10 @@ if __name__ == "__main__":
     df = preparator.load_data()
     df = preparator.clean_data()
 
-    # Add Unknown-category samples for out-of-distribution detection
-    df = add_unknown_samples(df, unknown_fraction=0.15, random_state=42)
-    preparator.df = df
+    if "data_source" not in df.columns:
+        df = preparator.assign_data_source(holdout_fraction=0.2)
+    else:
+        preparator.df = df
 
     df = preparator.balance_classes()
 
@@ -544,20 +608,8 @@ if __name__ == "__main__":
     metrics = classifier.train(df)
     classifier.save()
 
-    # Test known category
     test_text = "experienced software engineer python java machine learning aws docker"
     prediction, confidence = classifier.predict_category(
         preprocessor.preprocess(test_text), raw_text=test_text
     )
     print(f"\nTest prediction (known): {prediction} (confidence: {confidence:.2%})")
-
-    # Test out-of-distribution (should be Unknown)
-    unknown_text = "registered nurse with 10 years of critical care experience"
-    unknown_pred, unknown_conf = classifier.predict_category(
-        preprocessor.preprocess(unknown_text), raw_text=unknown_text
-    )
-    print(f"Test prediction (OOD):  {unknown_pred} (confidence: {unknown_conf:.2%})")
-    if unknown_pred == UNKNOWN_CATEGORY:
-        print("✅ OOD correctly detected as Unknown")
-    else:
-        print(f"❌ OOD misclassified as '{unknown_pred}' — expected '{UNKNOWN_CATEGORY}'")

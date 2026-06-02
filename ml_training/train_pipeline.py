@@ -17,7 +17,7 @@ def run_training_pipeline(
     data_path: str = None,
     output_dir: str = "models",
     max_features: int = 8000,
-    model_type: str = "gradient_boosting",
+    model_type: str = "xgboost",
     create_sample: bool = False,
     use_hf_dataset: bool = False,
     hf_max_rows: int = None,
@@ -25,7 +25,6 @@ def run_training_pipeline(
     balance_classes: bool = True,
     force_balance: bool = False,
     feature_backend: str = "minilm",
-    unknown_fraction: float = 0.15,
 ):
     """
     Run the complete training pipeline with improved model selection.
@@ -37,8 +36,6 @@ def run_training_pipeline(
     from ml_training.data_preparation import (
         DataPreparator,
         create_sample_dataset,
-        add_unknown_samples,
-        UNKNOWN_CATEGORY,
     )
     from ml_training.text_preprocessing import TextPreprocessor
     from ml_training.model_training import ResumeClassifier
@@ -64,12 +61,6 @@ def run_training_pipeline(
         logger.info(f"Class imbalance ratio: {explorations['imbalance_ratio']:.2f}")
 
     df = preparator.clean_data()
-
-    # Add synthetic "Unknown" category samples for out-of-distribution detection
-    logger.info("Adding synthetic Unknown-category samples...")
-    df = add_unknown_samples(df, unknown_fraction=unknown_fraction, random_state=42)
-    preparator.df = df
-    logger.info(f"Unknown samples added. Total rows: {len(df)}")
 
     if "data_source" not in df.columns:
         df = preparator.assign_data_source(holdout_fraction=0.2)
@@ -137,6 +128,14 @@ def run_training_pipeline(
     for name, path in saved_paths.items():
         logger.info(f"  - {name}: {path}")
 
+    metrics_path = Path(output_dir) / "training_metrics.json"
+    import json
+
+    metrics_path.parent.mkdir(parents=True, exist_ok=True)
+    with metrics_path.open("w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2)
+    logger.info(f"Saved training metrics to {metrics_path}")
+
     logger.info("\n✅ STEP 5: Validation")
     logger.info("-" * 40)
 
@@ -166,10 +165,6 @@ def run_training_pipeline(
         prediction, confidence = classifier.predict_category(cleaned, raw_text=raw_text)
         logger.info(f"  Input: {raw_text[:55]}...")
         logger.info(f"  Predicted: {prediction} (confidence: {confidence:.2%})")
-        if "nurse" in raw_text.lower():
-            expected = UNKNOWN_CATEGORY
-            is_correct = prediction == expected
-            logger.info(f"  {'✅' if is_correct else '❌'} Expected '{expected}', got '{prediction}'")
 
     logger.info("\n" + "=" * 60)
     logger.info("TRAINING PIPELINE COMPLETED SUCCESSFULLY")
@@ -187,11 +182,10 @@ def run_training_pipeline(
     }
 
 
-def compare_all_models(data_path: str = None, sample_size: int = 500, unknown_fraction: float = 0.15):
+def compare_all_models(data_path: str = None, sample_size: int = 500):
     from ml_training.data_preparation import (
         create_sample_dataset,
         DataPreparator,
-        add_unknown_samples,
     )
     from ml_training.text_preprocessing import TextPreprocessor
     from ml_training.model_training import compare_models
@@ -202,10 +196,6 @@ def compare_all_models(data_path: str = None, sample_size: int = 500, unknown_fr
     preparator = DataPreparator(data_path)
     df = preparator.load_data()
     df = preparator.clean_data()
-
-    # Add Unknown samples before balancing
-    df = add_unknown_samples(df, unknown_fraction=unknown_fraction, random_state=42)
-    preparator.df = df
 
     df = preparator.balance_classes()
 
@@ -235,8 +225,15 @@ def main():
         "--model-type",
         "-m",
         type=str,
-        default="gradient_boosting",
-        choices=["logistic", "random_forest", "gradient_boosting", "svm", "knn"],
+        default="xgboost",
+        choices=[
+            "logistic",
+            "random_forest",
+            "gradient_boosting",
+            "svm",
+            "knn",
+            "xgboost",
+        ],
     )
     parser.add_argument("--compare", "-c", action="store_true")
     parser.add_argument("--sample", "-s", action="store_true")
@@ -267,20 +264,12 @@ def main():
         choices=["minilm", "tfidf"],
         help="Categorization: minilm (MiniLM embeddings) or tfidf",
     )
-    parser.add_argument(
-        "--unknown-fraction",
-        type=float,
-        default=0.15,
-        help="Fraction of Unknown-category samples to add (default: 0.15)",
-    )
-
     args = parser.parse_args()
 
     if args.compare:
         compare_all_models(
             data_path=args.data,
             sample_size=args.sample_size,
-            unknown_fraction=args.unknown_fraction,
         )
     else:
         run_training_pipeline(
@@ -295,7 +284,6 @@ def main():
             balance_classes=not args.no_balance,
             force_balance=args.balance,
             feature_backend=args.feature_backend,
-            unknown_fraction=args.unknown_fraction,
         )
 
 

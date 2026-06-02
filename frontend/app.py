@@ -507,7 +507,7 @@ def main():
                                 resume["category_confidence"] = pred["confidence"]
                                 resume["prediction_error"] = None
                             except Exception as e:
-                                resume["predicted_category"] = "Unknown"
+                                resume["predicted_category"] = None
                                 resume["category_confidence"] = 0.0
                                 resume["prediction_error"] = str(e)
 
@@ -575,18 +575,15 @@ def main():
                                     # Category prediction
                                     if resume.get("predicted_category"):
                                         conf_pct = resume["category_confidence"] * 100
-                                        if resume["predicted_category"] == "Unknown":
-                                            st.caption(
-                                                f"Predicted Category: ❓ Unknown (confidence too low: {conf_pct:.1f}%)"
-                                            )
-                                        else:
-                                            st.caption(
-                                                f"Predicted Category: {resume['predicted_category']} ({conf_pct:.1f}% confidence)"
-                                            )
-                                    if resume.get("prediction_error"):
+                                        st.caption(
+                                            f"Predicted Category: {resume['predicted_category']} ({conf_pct:.1f}% confidence)"
+                                        )
+                                    elif resume.get("prediction_error"):
                                         st.caption(
                                             f"Prediction error: {resume['prediction_error']}"
                                         )
+                                    else:
+                                        st.caption("Predicted Category: unavailable")
 
                                 with col2:
                                     st.markdown(
@@ -630,7 +627,7 @@ def main():
                                         resume["skill_match_score"], 4
                                     ),
                                     "Predicted Category": resume.get(
-                                        "predicted_category", "Unknown"
+                                        "predicted_category", ""
                                     ),
                                     "Category Confidence": round(
                                         resume.get("category_confidence", 0.0), 4
