@@ -76,13 +76,20 @@ class ModelManager:
             logger.error(f"Error loading models: {e}")
             return False
     
-    def predict_category(self, text: str) -> Dict[str, Any]:
-        """Predict category for a resume text."""
+    def predict_category(self, text: str, confidence_threshold: float = 0.5) -> Dict[str, Any]:
+        """
+        Predict category for a resume text.
+        
+        Args:
+            text: Raw resume text
+            confidence_threshold: Minimum confidence to assign a category (default: 0.5).
+                                  Below this threshold, returns 'Unknown' category.
+        """
         if not self.is_loaded:
             raise ValueError("Models not loaded")
         
         cleaned_text = self.preprocessor.preprocess(text)
-        category, confidence = self.classifier.predict_category(cleaned_text)
+        category, confidence = self.classifier.predict_category(cleaned_text, confidence_threshold=confidence_threshold)
         
         return {
             "category": category,
@@ -276,12 +283,12 @@ async def screen_resumes(
         # Add category predictions
         for resume in ranked:
             try:
-                prediction = model_manager.predict_category(resume['cleaned_text'])
+                prediction = model_manager.predict_category(resume['cleaned_text'], confidence_threshold=0.5)
                 resume['predicted_category'] = prediction['category']
                 resume['category_confidence'] = prediction['confidence']
             except:
-                resume['predicted_category'] = None
-                resume['category_confidence'] = None
+                resume['predicted_category'] = 'Unknown'
+                resume['category_confidence'] = 0.0
         
         return {
             "success": True,

@@ -189,12 +189,14 @@ class ResumeClassifier:
         
         return predicted_labels, probabilities
     
-    def predict_category(self, text: str) -> Tuple[str, float]:
+    def predict_category(self, text: str, confidence_threshold: float = 0.5) -> Tuple[str, float]:
         """
         Predict category for a single text.
         
         Args:
             text: Preprocessed resume text
+            confidence_threshold: Minimum confidence required to assign a category.
+                                  If confidence is below this threshold, returns 'Unknown'.
             
         Returns:
             Tuple of (predicted category, confidence score)
@@ -202,6 +204,10 @@ class ResumeClassifier:
         labels, probs = self.predict([text])
         predicted_label = labels[0]
         confidence = float(probs[0].max())
+        
+        # If confidence is below threshold, classify as Unknown
+        if confidence < confidence_threshold:
+            return 'Unknown', confidence
         
         return predicted_label, confidence
     
