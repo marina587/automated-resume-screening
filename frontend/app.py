@@ -363,7 +363,7 @@ def main():
                             # Predict category
                             try:
                                 cleaned = model_loader.preprocessor.preprocess(resume['cleaned_text'])
-                                category, confidence = model_loader.classifier.predict_category(cleaned)
+                                category, confidence = model_loader.classifier.predict_category(cleaned, confidence_threshold=0.5)
                                 resume['predicted_category'] = category
                                 resume['category_confidence'] = confidence
                             except:
